@@ -1,0 +1,11 @@
+# Ignore Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node dependencies
+frontend/node_modules/
+
+# Environment files
+*.env
+*.venv

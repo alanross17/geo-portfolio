@@ -16,7 +16,11 @@ with open(os.path.join(BASE_DIR, "images.json"), "r") as f:
 # Ensure each catalog item has a public URL:
 BASE_URL = os.environ.get("PUBLIC_BASE_URL", "")
 for item in CATALOG:
-    item["url"] = f"/images/{item['file']}"
+    # If a PUBLIC_BASE_URL env var is set, prefix image URLs with it so that
+    # the frontend can resolve images correctly when the backend is served
+    # behind a proxy or a non-root path.
+    base = BASE_URL.rstrip("/")
+    item["url"] = f"{base}/images/{item['file']}" if base else f"/images/{item['file']}"
 
 def haversine(lat1, lon1, lat2, lon2):
     # returns distance in meters
