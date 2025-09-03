@@ -3,3 +3,9 @@
 @tailwind utilities;
 
 :root { color-scheme: light; }
+
+@layer base {
+  body {
+    @apply font-serif;
+  }
+}

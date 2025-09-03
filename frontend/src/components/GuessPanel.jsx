@@ -21,27 +21,25 @@ export default function GuessPanel({ onGuess }) {
   const [picked, setPicked] = useState(null)
 
   return (
-    <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-white">
-      <div className="w-full h-[50vh]">
-        <MapContainer center={[20, 0]} zoom={2} className="h-full w-full" worldCopyJump>
-          <TileLayer
-            attribution='&copy; OpenStreetMap'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <ClickHandler onPick={(ll)=>setPicked(ll)} />
-          {picked && <Marker position={[picked.lat, picked.lng]} icon={markerIcon} />}
-        </MapContainer>
-      </div>
-      <div className="p-4 flex items-center justify-between">
-        <div className="text-sm text-gray-500">
-          {picked ? `Picked: ${picked.lat.toFixed(4)}, ${picked.lng.toFixed(4)}` : "Click anywhere to drop a pin"}
+    <div className="fixed bottom-4 right-4 w-[30vw] h-[30vh] min-w-[250px] min-h-[200px] rounded-xl overflow-hidden shadow-lg bg-white/80 backdrop-blur-sm">
+      <MapContainer center={[20, 0]} zoom={2} className="h-full w-full grayscale" worldCopyJump>
+        <TileLayer
+          attribution='&copy; OpenStreetMap'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <ClickHandler onPick={(ll)=>setPicked(ll)} />
+        {picked && <Marker position={[picked.lat, picked.lng]} icon={markerIcon} />}
+      </MapContainer>
+      <div className="absolute bottom-0 left-0 right-0 bg-white/80 text-xs p-2 flex items-center justify-between">
+        <div>
+          {picked ? `Picked: ${picked.lat.toFixed(2)}, ${picked.lng.toFixed(2)}` : "Click to drop a pin"}
         </div>
         <button
-          className="px-4 py-2 rounded-xl bg-black text-white disabled:bg-gray-300"
+          className="px-2 py-1 rounded bg-black text-white disabled:bg-gray-300"
           disabled={!picked}
           onClick={()=>onGuess(picked)}
         >
-          Make Guess
+          Guess
         </button>
       </div>
     </div>
