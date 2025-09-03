@@ -1,0 +1,18 @@
+[
+  {
+    "id": "lofoten_001",
+    "file": "lofoten_001.jpg",
+    "lat": 68.1389,
+    "lng": 13.6146,
+    "title": "Arctic Light",
+    "subtitle": "Lofoten Islands, Norway"
+  },
+  {
+    "id": "tofino_001",
+    "file": "tofino_001.jpg",
+    "lat": 49.1520,
+    "lng": -125.9066,
+    "title": "Mist & Driftwood",
+    "subtitle": "Tofino, BC"
+  }
+]
