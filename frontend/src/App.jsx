@@ -42,7 +42,7 @@ export default function App() {
   return (
     <div className="relative w-full h-full overflow-hidden">
       {current && <PhotoCard image={current} />}
-      <Header />
+      <Header imageUrl={current?.url} />
       <div className="fixed top-4 left-1/2 -translate-x-1/2 text-sm mix-blend-difference">
         Photo {idx+1} / {images.length} — Session Score: {sessionScore}
       </div>
