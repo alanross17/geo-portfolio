@@ -1,12 +1,10 @@
 export default function Header() {
   return (
-    <header className="w-full py-6">
-      <div className="max-w-5xl mx-auto px-6 flex items-center justify-between">
-        <div className="text-xl font-semibold tracking-tight">Alan Ross — Photography</div>
-        <nav className="text-sm text-gray-500">
-          <a href="#" className="hover:text-black">Portfolio Guess</a>
-        </nav>
-      </div>
-    </header>
+    <>
+      <div className="fixed top-4 left-4 text-xl font-semibold text-white mix-blend-difference">Alan Ross — Photography</div>
+      <nav className="fixed top-4 right-4 text-sm text-white mix-blend-difference">
+        <a href="#" className="hover:underline">Portfolio Guess</a>
+      </nav>
+    </>
   )
 }

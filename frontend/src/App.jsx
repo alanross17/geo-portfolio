@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import Header from "./components/Header.jsx"
 import PhotoCard from "./components/PhotoCard.jsx"
 import GuessPanel from "./components/GuessPanel.jsx"
@@ -40,22 +40,15 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-full flex flex-col">
+    <div className="relative w-full h-full overflow-hidden">
+      {current && <PhotoCard image={current} />}
       <Header />
-      <main className="flex-1">
-        <div className="max-w-5xl mx-auto px-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-500">Photo {idx+1} / {images.length}</div>
-            <div className="text-sm text-gray-900 font-medium">Session Score: {sessionScore}</div>
-          </div>
-
-          {current && <PhotoCard image={current} />}
-
-          <GuessPanel onGuess={onGuess} />
-        </div>
-      </main>
-      <Footer />
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 text-sm mix-blend-difference">
+        Photo {idx+1} / {images.length} — Session Score: {sessionScore}
+      </div>
+      <GuessPanel onGuess={onGuess} />
       <ResultOverlay result={result} onNext={onNext} />
+      <Footer />
     </div>
   )
 }
