@@ -23,11 +23,23 @@ for item in CATALOG:
     item["url"] = f"{base}/images/{item['file']}" if base else f"/images/{item['file']}"
 
 def haversine(lat1, lon1, lat2, lon2):
-    # returns distance in meters
-    R = 6371000.0
-    dlat = radians(lat2-lat1)
-    dlon = radians(lon2-lon1)
-    a = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
+    """Compute the great-circle distance between two points.
+
+    All arguments are expected to be in decimal degrees. This implementation
+    converts them to radians up front to avoid precision issues that can cause
+    noticeable errors when the coordinates are very close together.
+    """
+    R = 6371000.0  # Earth radius in meters
+
+    # Convert latitudes and longitudes from degrees to radians first. Doing the
+    # conversion once and reusing the results helps maintain numerical
+    # stability, which is important for near-identical coordinates where small
+    # rounding errors could translate to large distance differences.
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
     return 2 * R * asin(sqrt(a))
 
 @app.get("/api/images")
