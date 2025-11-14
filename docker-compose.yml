@@ -6,6 +6,7 @@ services:
     image: geo-portfolio-backend
     environment:
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+      - DATABASE_URL=${DATABASE_URL}
     ports:
       - "8080:8080"
     volumes:

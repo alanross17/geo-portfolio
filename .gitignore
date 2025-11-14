@@ -10,3 +10,7 @@ node_modules
 # Environment files
 *.env
 *.venv
+
+# TEMP unitl better handling
+backend/static/images/*
+backend/images.json

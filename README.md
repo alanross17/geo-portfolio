@@ -10,6 +10,7 @@ A playful geolocation guessing game with a Flask backend and a React + Leaflet f
 
 ## 🧰 Tech Stack
 - Backend: 🐍 [Flask](https://flask.palletsprojects.com/) with CORS support
+- Database: 🗄️ [SQLAlchemy](https://www.sqlalchemy.org/) with MySQL (or SQLite for local dev)
 - Frontend: ⚛️ [React](https://react.dev/) powered by [Vite](https://vitejs.dev/)
 - Mapping: 🗺️ [Leaflet](https://leafletjs.com/) via [react-leaflet](https://react-leaflet.js.org/)
 - Styling: 🎨 [Tailwind CSS](https://tailwindcss.com/)
@@ -30,8 +31,12 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+# Optional: point to MySQL
+export DATABASE_URL="mysql+pymysql://user:pass@host:3306/geo_portfolio"
 python app.py
 ```
+
+If no `DATABASE_URL` is provided, the app falls back to a local SQLite file (`backend/images.db`). On first run, the database is auto-populated from `backend/images.json` when present.
 
 ### Frontend
 ```bash
@@ -46,7 +51,7 @@ Then open <http://localhost:5173> and start guessing!
 ```bash
 docker-compose up --build
 ```
-This launches both the API (on port 8080) and the frontend (on port 5173).
+This launches both the API (on port 8080) and the frontend (on port 5173). Set the `DATABASE_URL` environment variable to point at your MySQL instance before building if you don't want the default SQLite database.
 
 ## 🔌 API Endpoints
 - `GET /api/images` – list of available images (no coordinates)
@@ -56,8 +61,10 @@ This launches both the API (on port 8080) and the frontend (on port 5173).
 
 ## 🖼️ Adding Your Own Photos
 1. Drop images into `backend/static/images/`
-2. Add entries to `backend/images.json` with `id`, `file`, `lat`, `lng`, and optional `title`/`subtitle`
+2. Insert a new row into the `images` table with fields: `id`, `relative_url` (e.g. `images/my-photo.jpg`), `lat`, `lng`, and optional `title`/`subtitle`
 3. Restart the backend and enjoy! 🌟
+
+To seed via JSON for quick demos, you can still place entries in `backend/images.json`; they are only imported automatically when the database is empty.
 
 ## 📜 License
 This project is provided as-is for learning and fun. Feel free to adapt it to your needs.
