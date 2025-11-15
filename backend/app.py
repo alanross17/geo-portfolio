@@ -1,7 +1,10 @@
-import json, os, random
+import os
 from math import radians, sin, cos, asin, sqrt
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from sqlalchemy import select
+
+from database import Image, get_session, init_db
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGES_PATH = os.path.join(BASE_DIR, "static", "images")
@@ -10,39 +13,49 @@ FRONTEND_BUILD = os.path.join(BASE_DIR, "static", "app")
 app = Flask(__name__, static_folder=FRONTEND_BUILD, static_url_path="/")
 CORS(app)  # dev-friendly; in prod you may restrict origins
 
-with open(os.path.join(BASE_DIR, "images.json"), "r") as f:
-    CATALOG = json.load(f)
+# Initialize database and seed from the legacy JSON file if it's present.
+init_db(os.path.join(BASE_DIR, "images.json"))
 
-# Ensure each catalog item has a public URL:
-BASE_URL = os.environ.get("PUBLIC_BASE_URL", "")
-for item in CATALOG:
-    # If a PUBLIC_BASE_URL env var is set, prefix image URLs with it so that
-    # the frontend can resolve images correctly when the backend is served
-    # behind a proxy or a non-root path.
-    base = BASE_URL.rstrip("/")
-    item["url"] = f"{base}/images/{item['file']}" if base else f"/images/{item['file']}"
+BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+
+
+def build_public_url(relative_url: str) -> str:
+    rel = relative_url.lstrip("/")
+    if BASE_URL:
+        return f"{BASE_URL}/{rel}"
+    return f"/{rel}"
+
+
+def serialize_image(image: Image) -> dict:
+    return {
+        "id": image.id,
+        "title": image.title,
+        "subtitle": image.subtitle,
+        "url": build_public_url(image.relative_url),
+    }
 
 def haversine(lat1, lon1, lat2, lon2):
     # returns distance in meters
     R = 6371000.0
-    dlat = radians(lat2-lat1)
-    dlon = radians(lon2-lon1)
-    a = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
     return 2 * R * asin(sqrt(a))
 
 @app.get("/api/images")
 def api_images():
-    # Don’t leak coordinates here—frontend doesn’t need them for listing.
-    safe = [{k: v for k, v in i.items() if k not in ("lat","lng")} for i in CATALOG]
+    with get_session() as session:
+        images = session.scalars(select(Image)).all()
+    safe = [serialize_image(image) for image in images]
     return jsonify(safe)
 
 @app.get("/api/image/<image_id>")
 def api_image(image_id):
-    item = next((i for i in CATALOG if i["id"] == image_id), None)
-    if not item:
+    with get_session() as session:
+        image = session.get(Image, image_id)
+    if not image:
         return jsonify({"error": "not found"}), 404
-    # don’t send coords here either
-    safe = {k: v for k, v in item.items() if k not in ("lat","lng")}
+    safe = serialize_image(image)
     return jsonify(safe)
 
 @app.post("/api/guess")
@@ -53,24 +66,25 @@ def api_guess():
     guess_lat = float(guess.get("lat"))
     guess_lng = float(guess.get("lng"))
 
-    item = next((i for i in CATALOG if i["id"] == image_id), None)
-    if not item:
+    with get_session() as session:
+        image = session.get(Image, image_id)
+    if not image:
         return jsonify({"error": "not found"}), 404
 
-    dist_m = haversine(guess_lat, guess_lng, item["lat"], item["lng"])
+    dist_m = haversine(guess_lat, guess_lng, image.lat, image.lng)
     # simple score: 5000 max, decreases with distance (tweak as you like)
     # 0 at ~ 20,000 km; feel free to change curve later
-    score = max(0, int(5000 * (1 - min(dist_m, 20_000_000)/20_000_000)))
+    score = max(0, int(5000 * (1 - min(dist_m, 20_000_000) / 20_000_000)))
 
     payload = {
         "distance_meters": round(dist_m, 2),
         "score": score,
         "solution": {
-            "lat": item["lat"],
-            "lng": item["lng"],
-            "title": item.get("title"),
-            "subtitle": item.get("subtitle")
-        }
+            "lat": image.lat,
+            "lng": image.lng,
+            "title": image.title,
+            "subtitle": image.subtitle,
+        },
     }
     return jsonify(payload)
 
