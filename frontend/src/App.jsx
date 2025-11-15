@@ -26,7 +26,7 @@ export default function App() {
 
   const onGuess = async (latlng) => {
     const res = await submitGuess(current.id, latlng.lat, latlng.lng)
-    setResult(res)
+    setResult({ ...res, guess: { lat: latlng.lat, lng: latlng.lng } })
     setSessionScore(prev => prev + res.score)
   }
 
