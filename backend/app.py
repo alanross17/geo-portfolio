@@ -1,8 +1,9 @@
 import os
-from math import radians, sin, cos, asin, sqrt
+from math import radians, sin, cos, asin, sqrt, exp
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from sqlalchemy import select
+import logging
 
 from database import Image, get_session, init_db
 
@@ -49,6 +50,26 @@ def api_images():
     safe = [serialize_image(image) for image in images]
     return jsonify(safe)
 
+def calc_score(dist_m) -> int:
+    # score function
+    # exponential decay, emphasizes close guesses
+    D_MAX = 20_000_0000 # (m) max scorable distance, based on the rough maximum distance between places on a globe
+    SCORE_MAX = 5000 # the maximum allowable score (perfect guess)
+    LAMBDA = 4_000_000 # is a “scale” parameter (in m). Roughly: distance where score has dropped to ~37% of max.
+
+    # Example scores with λ = 4000:
+    # 0 km → 5000
+    # 1,000 km → ~3,894
+    # 2,000 km → ~3,033
+    # 5,000 km → ~1,433
+    # 10,000 km → ~410
+    # 20,000 km → ~34
+
+    if dist_m > D_MAX:
+        return 0
+
+    return round(SCORE_MAX * exp(-dist_m / LAMBDA))
+
 @app.get("/api/image/<image_id>")
 def api_image(image_id):
     with get_session() as session:
@@ -72,9 +93,7 @@ def api_guess():
         return jsonify({"error": "not found"}), 404
 
     dist_m = haversine(guess_lat, guess_lng, image.lat, image.lng)
-    # simple score: 5000 max, decreases with distance (tweak as you like)
-    # 0 at ~ 20,000 km; feel free to change curve later
-    score = max(0, int(5000 * (1 - min(dist_m, 20_000_000) / 20_000_000)))
+    score = calc_score(dist_m)
 
     payload = {
         "distance_meters": round(dist_m, 2),
