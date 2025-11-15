@@ -65,13 +65,10 @@ def calc_score(dist_m) -> int:
     # 10,000 km → ~410
     # 20,000 km → ~34
 
-    score = dist_m
     if dist_m > D_MAX:
-        score = 0
-    else:
-        score = round(SCORE_MAX * exp( -dist_m / LAMBDA))
+        return 0
 
-    return score
+    return round(SCORE_MAX * exp(-dist_m / LAMBDA))
 
 @app.get("/api/image/<image_id>")
 def api_image(image_id):
