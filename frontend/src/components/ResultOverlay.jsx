@@ -1,17 +1,74 @@
+import { useEffect } from "react"
+import { MapContainer, TileLayer, Marker, Tooltip, useMap } from "react-leaflet"
+import { guessIcon, solutionIcon } from "./mapIcons"
+
+function FitToPins({ guess, solution }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!guess || !solution) return
+    if (guess.lat === solution.lat && guess.lng === solution.lng) {
+      map.setView([guess.lat, guess.lng], Math.max(map.getZoom(), 6))
+      return
+    }
+
+    map.fitBounds(
+      [
+        [guess.lat, guess.lng],
+        [solution.lat, solution.lng]
+      ],
+      { padding: [40, 40], maxZoom: 6 }
+    )
+  }, [map, guess, solution])
+
+  return null
+}
+
 export default function ResultOverlay({ result, onNext }) {
   if (!result) return null
   const km = (result.distance_meters / 1000).toFixed(2)
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-[min(540px,92vw)] text-center">
-        <div className="text-3xl font-semibold mb-2">{result.score} pts</div>
-        <div className="text-gray-600 mb-6">You were {km} km away.</div>
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-[min(620px,92vw)] text-center space-y-6">
+        <div>
+          <div className="text-3xl font-semibold mb-2">{result.score} pts</div>
+          <div className="text-gray-600">You were {km} km away.</div>
+        </div>
 
-        {result.solution?.title && (
-          <div className="mb-1 font-medium">{result.solution.title}</div>
+        {(result.solution?.title || result.solution?.subtitle) && (
+          <div>
+            {result.solution?.title && (
+              <div className="font-medium">{result.solution.title}</div>
+            )}
+            {result.solution?.subtitle && (
+              <div className="text-gray-500">{result.solution.subtitle}</div>
+            )}
+          </div>
         )}
-        {result.solution?.subtitle && (
-          <div className="mb-6 text-gray-500">{result.solution.subtitle}</div>
+
+        {result.guess && result.solution && (
+          <div className="h-64 w-full overflow-hidden rounded-xl">
+            <MapContainer
+              center={[result.solution.lat, result.solution.lng]}
+              zoom={4}
+              className="h-full w-full"
+              worldCopyJump
+              scrollWheelZoom={false}
+            >
+              <TileLayer
+                attribution='&copy; OpenStreetMap'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <FitToPins guess={result.guess} solution={result.solution} />
+              <Marker position={[result.guess.lat, result.guess.lng]} icon={guessIcon}>
+                <Tooltip direction="top" offset={[0, -32]} permanent>Your Guess</Tooltip>
+              </Marker>
+              <Marker position={[result.solution.lat, result.solution.lng]} icon={solutionIcon}>
+                <Tooltip direction="top" offset={[0, -32]} permanent>Actual Location</Tooltip>
+              </Marker>
+            </MapContainer>
+          </div>
         )}
 
         <button
