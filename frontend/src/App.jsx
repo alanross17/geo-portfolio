@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Header from "./components/Header.jsx"
 import PhotoCard from "./components/PhotoCard.jsx"
 import GuessPanel from "./components/GuessPanel.jsx"
@@ -22,6 +22,10 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState([])
   const [hasSubmittedScore, setHasSubmittedScore] = useState(false)
 
+  const [overlayTone, setOverlayTone] = useState({ topLeft: "dark", bottomLeft: "dark" })
+
+  const handleToneChange = useCallback((tones) => setOverlayTone(tones), [])
+
   const hydrateSession = (payload) => {
     setSession({
       id: payload.session_id,
@@ -41,6 +45,7 @@ export default function App() {
     setResult(null)
     setSummaryOpen(false)
     setHasSubmittedScore(false)
+    setOverlayTone({ topLeft: "dark", bottomLeft: "dark" })
     setMenuOpen(false)
     setLoading(false)
   }
@@ -125,7 +130,9 @@ export default function App() {
 
   return (
     <div className="relative w-full h-full overflow-hidden">
-      {currentImage && <PhotoCard image={currentImage} />}
+      {currentImage && (
+        <PhotoCard image={currentImage} onToneChange={handleToneChange} />
+      )}
       <Header
         menuOpen={menuOpen}
         onToggleMenu={(next) =>
@@ -136,8 +143,13 @@ export default function App() {
         currentScore={totalScore}
         roundsPlayed={session?.roundsPlayed || 0}
         bonusTotal={bonusTotal}
+        tone={overlayTone.topLeft}
       />
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 text-sm mix-blend-difference">
+      <div
+        className={`fixed top-4 left-1/2 -translate-x-1/2 text-sm ${
+          overlayTone.topLeft === "light" ? "text-black" : "text-white"
+        }`}
+      >
         Photo {Math.min(session.roundsPlayed + 1, session.roundLimit)} / {session.roundLimit} — Session Score: {totalScore}
       </div>
       <GuessPanel onGuess={onGuess} result={result} />
@@ -168,7 +180,7 @@ export default function App() {
         leaderboard={leaderboard}
         currentScore={totalScore}
       />
-      <Footer />
+      <Footer tone={overlayTone.bottomLeft} />
     </div>
   )
 }
