@@ -24,15 +24,20 @@ function FitToPins({ guess, solution }) {
   return null
 }
 
-export default function ResultOverlay({ result, onNext }) {
+export default function ResultOverlay({ result, onNext, bonusPoints, bonusRadius, isFinalRound }) {
   if (!result) return null
   const km = (result.distance_meters / 1000).toFixed(2)
+  const earnedBonus = result.roundBonus > 0
+  const buttonLabel = isFinalRound ? "See totals" : "Next Photo"
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-[min(620px,92vw)] text-center space-y-6">
         <div>
-          <div className="text-3xl font-semibold mb-2">{result.score} pts</div>
+          <div className="text-3xl font-semibold mb-2">{result.totalScore} pts</div>
+          <div className="text-sm text-green-700 font-medium">
+            {earnedBonus ? `Includes +${bonusPoints} bonus for ${bonusRadius} km accuracy` : "No bonus this round"}
+          </div>
           <div className="text-gray-600">You were {km} km away.</div>
         </div>
 
@@ -75,7 +80,7 @@ export default function ResultOverlay({ result, onNext }) {
           className="px-5 py-2.5 rounded-xl bg-black text-white"
           onClick={onNext}
         >
-          Next Photo
+          {buttonLabel}
         </button>
       </div>
     </div>
