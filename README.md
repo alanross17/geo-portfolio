@@ -57,6 +57,11 @@ This launches both the API (on port 8080) and the frontend (on port 5173). Set t
 - `GET /api/images` – list of available images (no coordinates)
 - `GET /api/image/<id>` – details for a single image
 - `POST /api/guess` – send `{ image_id, guess: { lat, lng } }` and receive score & solution
+- `POST /api/session` – start a multi-round game session; response includes session ID, round limit, and the next image
+- `POST /api/session/<session_id>/guess` – submit a guess within a session; response includes round details, updated totals, and the next image
+- `GET /api/session/<session_id>/summary` – fetch the full summary for a session (totals and all rounds)
+- `GET /api/leaderboard` – retrieve the top leaderboard entries
+- `POST /api/leaderboard` – submit a finished session score to the leaderboard
 - Images are served from `/images/<filename>`
 
 ## 🖼️ Adding Your Own Photos
