@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  geo-portfolio:
+    build:
+      context: .
+      dockerfile: Dockerfile   # The unified FE+BE image
+    image: geo-portfolio:prod
+    container_name: geo-portfolio
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    # networks:
+      # - proxy
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    # labels:
+      # - "traefik.enable=true"
+
+      # # --- Replace SUBDOMAIN below ---
+      # - "traefik.http.routers.geo-portfolio.rule=Host(`SUBDOMAIN.alanross.io`)"
+      # - "traefik.http.routers.geo-portfolio.entrypoints=websecure"
+      # - "traefik.http.routers.geo-portfolio.tls.certresolver=letsencrypt"
+
+      # # Forward traffic to port 8080 in the container
+      # - "traefik.http.services.geo-portfolio.loadbalancer.server.port=8080"
+
+# networks:
+#   traefik:
+#     external: true

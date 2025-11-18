@@ -1,6 +1,7 @@
 import json
 import random
 import uuid
+import logging
 import os
 from math import radians, sin, cos, asin, sqrt, exp
 from typing import List
@@ -11,12 +12,28 @@ from sqlalchemy import select
 from database import Image, get_session, init_db
 from models import GameSession, LeaderboardEntry
 
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGES_PATH = os.path.join(BASE_DIR, "static", "images")
 FRONTEND_BUILD = os.path.join(BASE_DIR, "static", "app")
 
 app = Flask(__name__, static_folder=FRONTEND_BUILD, static_url_path="/")
-CORS(app)  # dev-friendly; in prod you may restrict origins
+
+allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ALLOW_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if allowed_origins:
+    CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
+else:
+    CORS(app)  # dev-friendly; in prod you may restrict origins
 
 # Initialize database and seed from the legacy JSON file if it's present.
 init_db(os.path.join(BASE_DIR, "images.json"))
@@ -42,6 +59,22 @@ def serialize_image(image: Image) -> dict:
         "subtitle": image.subtitle,
         "url": build_public_url(image.relative_url),
     }
+
+def parse_guess_payload(data):
+    if not isinstance(data, dict):
+        return None, "Invalid JSON payload"
+
+    guess = data.get("guess")
+    if not isinstance(guess, dict):
+        return None, "Missing guess payload"
+
+    try:
+        guess_lat = float(guess.get("lat"))
+        guess_lng = float(guess.get("lng"))
+    except (TypeError, ValueError):
+        return None, "Invalid or missing guess coordinates"
+
+    return {"lat": guess_lat, "lng": guess_lng}, None
 
 def haversine(lat1, lon1, lat2, lon2):
     # returns distance in meters
@@ -135,18 +168,20 @@ def serve_image(filename):
 
 @app.post("/api/guess")
 def api_guess():
-    data = request.get_json(force=True)
-    image_id = data.get("image_id")
-    guess = data.get("guess", {})
-    guess_lat = float(guess.get("lat"))
-    guess_lng = float(guess.get("lng"))
+    data = request.get_json(silent=True)
+    guess, error = parse_guess_payload(data)
+    image_id = data.get("image_id") if isinstance(data, dict) else None
+
+    if error or not image_id:
+        logger.warning("Invalid /api/guess payload: %s", error or "missing image_id")
+        return jsonify({"error": error or "image_id required"}), 400
 
     with get_session() as session:
         image = session.get(Image, image_id)
     if not image:
         return jsonify({"error": "not found"}), 404
 
-    dist_m = haversine(guess_lat, guess_lng, image.lat, image.lng)
+    dist_m = haversine(guess["lat"], guess["lng"], image.lat, image.lng)
     score = calc_score(dist_m)
 
     payload = {
@@ -179,10 +214,11 @@ def api_start_session():
 
 @app.post("/api/session/<session_id>/guess")
 def api_session_guess(session_id):
-    data = request.get_json(force=True)
-    guess = data.get("guess", {})
-    guess_lat = float(guess.get("lat"))
-    guess_lng = float(guess.get("lng"))
+    data = request.get_json(silent=True)
+    guess, error = parse_guess_payload(data)
+    if error:
+        logger.warning("Invalid /api/session/%s/guess payload: %s", session_id, error)
+        return jsonify({"error": error}), 400
 
     with get_session() as session:
         game_session = session.get(GameSession, session_id)
@@ -196,7 +232,7 @@ def api_session_guess(session_id):
         if not image:
             return jsonify({"error": "no more rounds"}), 400
 
-        dist_m = haversine(guess_lat, guess_lng, image.lat, image.lng)
+        dist_m = haversine(guess["lat"], guess["lng"], image.lat, image.lng)
         score = calc_score(dist_m)
         round_bonus = compute_bonus(dist_m)
         total_round_score = score + round_bonus
@@ -214,7 +250,7 @@ def api_session_guess(session_id):
                     "title": image.title,
                     "subtitle": image.subtitle,
                 },
-                "guess": {"lat": guess_lat, "lng": guess_lng},
+                "guess": {"lat": guess["lat"], "lng": guess["lng"]},
             }
         )
 
@@ -306,6 +342,11 @@ def api_add_leaderboard():
             for item in entries
         ]
     return jsonify(payload)
+
+@app.get("/health")
+def healthcheck():
+    return jsonify({"status": "ok"}), 200
+
 
 # (Optional) serve built frontend in production
 @app.route("/", defaults={"path": ""})
