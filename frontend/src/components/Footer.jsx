@@ -3,7 +3,7 @@ export default function Footer({ tone = "dark" }) {
 
   return (
     <footer className={`fixed bottom-4 left-4 text-xs ${textColorClass}`}>
-      © {new Date().getFullYear()} Alan Ross — All photos ©. <a href="#" className="underline-offset-2 hover:underline">Explore this project on my GitHub.</a>
+      © {new Date().getFullYear()} Alan Ross — All photos ©. <a href="#https://github.com/alanross17/geo-portfolio" className="underline-offset-2 hover:underline">Explore this project on my GitHub.</a>
     </footer>
   )
 }
