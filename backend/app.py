@@ -6,7 +6,7 @@ import os
 from math import radians, sin, cos, asin, sqrt, exp
 from typing import List
 from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
+from flask_cors import CORS # type: ignore
 from sqlalchemy import select
 
 from database import Image, get_session, init_db

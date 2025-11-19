@@ -3,7 +3,7 @@ export default function LeaderboardModal({ open, onClose, leaderboard, placement
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-40">
-      <div className="bg-white rounded-2xl shadow-2xl w-[min(620px,92vw)] max-h-[80vh] overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-[min(620px,92vw)] max-h-[80vh] overflow-hidden text-neutral-900">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
             <div className="text-xs uppercase tracking-wide text-gray-500">Live public leaderboard</div>
@@ -28,7 +28,7 @@ export default function LeaderboardModal({ open, onClose, leaderboard, placement
                     <div className="text-xs text-gray-500">{entry.score.toLocaleString()} pts</div>
                   </div>
                 </div>
-                {idx + 1 === placement && <span className="text-xs text-blue-700">You</span>}
+                {idx + 1 === placement && <span className="text-xs text-gray-700">You</span>}
               </li>
             ))}
           </ol>

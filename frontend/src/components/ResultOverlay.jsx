@@ -31,23 +31,23 @@ export default function ResultOverlay({ result, onNext, bonusPoints, bonusRadius
   const buttonLabel = isFinalRound ? "See totals" : "Next Photo"
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-[min(620px,92vw)] text-center space-y-6">
+    <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-[min(620px,92vw)] text-center space-y-6 text-neutral-900">
         <div>
           <div className="text-3xl font-semibold mb-2">{result.totalScore} pts</div>
-          <div className="text-sm text-green-700 font-medium">
+          <div className="text-sm text-neutral-600 font-medium">
             {earnedBonus ? `Includes +${bonusPoints} bonus for ${bonusRadius} km accuracy` : "No bonus this round"}
           </div>
-          <div className="text-gray-600">You were {km} km away.</div>
+          <div className="text-neutral-500">You were {km} km away.</div>
         </div>
 
         {(result.solution?.title || result.solution?.subtitle) && (
           <div>
             {result.solution?.title && (
-              <div className="font-medium">{result.solution.title}</div>
+              <div className="font-medium text-neutral-900">{result.solution.title}</div>
             )}
             {result.solution?.subtitle && (
-              <div className="text-gray-500">{result.solution.subtitle}</div>
+              <div className="text-neutral-500">{result.solution.subtitle}</div>
             )}
           </div>
         )}
@@ -57,7 +57,7 @@ export default function ResultOverlay({ result, onNext, bonusPoints, bonusRadius
             <MapContainer
               center={[result.solution.lat, result.solution.lng]}
               zoom={4}
-              className="h-full w-full"
+              className="h-full w-full grayscale"
               worldCopyJump
               scrollWheelZoom={false}
             >
@@ -77,7 +77,7 @@ export default function ResultOverlay({ result, onNext, bonusPoints, bonusRadius
         )}
 
         <button
-          className="px-5 py-2.5 rounded-xl bg-black text-white"
+          className="px-5 py-2.5 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800"
           onClick={onNext}
         >
           {buttonLabel}

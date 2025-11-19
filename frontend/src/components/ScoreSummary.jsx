@@ -29,7 +29,7 @@ export default function ScoreSummary({
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-[min(720px,94vw)] text-center space-y-6">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-[min(720px,94vw)] text-center space-y-6 text-neutral-900">
         <div className="space-y-2">
           <div className="text-sm uppercase tracking-wide text-gray-500">Game complete</div>
           <div className="text-4xl font-bold">{totalScore.toLocaleString()} pts</div>
@@ -37,20 +37,20 @@ export default function ScoreSummary({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-          <div className="p-4 rounded-xl bg-gray-50">
+          <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
             <div className="text-xs uppercase tracking-wide text-gray-500">Base score</div>
             <div className="text-lg font-semibold">{baseScore.toLocaleString()} pts</div>
           </div>
-          <div className="p-4 rounded-xl bg-green-50">
-            <div className="text-xs uppercase tracking-wide text-green-700">Bonuses</div>
-            <div className="text-lg font-semibold text-green-800">+{bonusTotal.toLocaleString()} pts</div>
-            <div className="text-xs text-green-700">{bonusRounds} close guesses (&lt; 25 km)</div>
+          <div className="p-4 rounded-xl bg-gray-100 border border-gray-200">
+            <div className="text-xs uppercase tracking-wide text-gray-600">Bonuses</div>
+            <div className="text-lg font-semibold text-neutral-900">+{bonusTotal.toLocaleString()} pts</div>
+            <div className="text-xs text-gray-600">{bonusRounds} close guesses (≤ 25 km)</div>
           </div>
-          <div className="p-4 rounded-xl bg-blue-50">
-            <div className="text-xs uppercase tracking-wide text-blue-700">Leaderboard place</div>
-            <div className="text-lg font-semibold text-blue-800">{placementLabel}</div>
+          <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
+            <div className="text-xs uppercase tracking-wide text-gray-600">Leaderboard place</div>
+            <div className="text-lg font-semibold text-neutral-900">{placementLabel}</div>
             <button
-              className="text-xs text-blue-700 underline hover:text-blue-900"
+              className="text-xs text-gray-700 underline underline-offset-4 hover:text-gray-900"
               onClick={onOpenLeaderboard}
             >
               View leaderboard
@@ -70,7 +70,7 @@ export default function ScoreSummary({
               disabled={hasSubmitted}
             />
             <button
-              className="px-4 py-2 rounded-lg bg-black text-white disabled:bg-gray-300"
+              className="px-4 py-2 rounded-lg bg-neutral-900 text-white disabled:bg-gray-300 disabled:text-gray-600"
               onClick={() => onAddToLeaderboard(name.trim())}
               disabled={!name.trim() || hasSubmitted}
             >
@@ -78,7 +78,7 @@ export default function ScoreSummary({
             </button>
           </div>
           {hasSubmitted && (
-            <div className="text-xs text-green-700">Your score is now visible to everyone.</div>
+            <div className="text-xs text-gray-600">Your score is now visible to everyone.</div>
           )}
         </div>
 
@@ -90,7 +90,7 @@ export default function ScoreSummary({
             See leaderboard
           </button>
           <button
-            className="px-5 py-2.5 rounded-xl bg-black text-white"
+            className="px-5 py-2.5 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800"
             onClick={onPlayAgain}
           >
             Play again
