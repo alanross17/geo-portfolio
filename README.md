@@ -1,6 +1,6 @@
 # 🌍 Geo Portfolio
 
-A playful geolocation guessing game with a Flask backend and a React + Leaflet frontend.
+Photo portfolio, but in the from of GeoGuessr. Came out of an idea to try to find a more creative way to make a photo website. Also an excuse to practice working in React and merge my photo and development portfolios.
 
 ## ✨ Features
 - 🗺️ Interactive map where you drop a pin to guess the photo's location
