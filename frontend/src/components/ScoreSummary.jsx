@@ -49,17 +49,17 @@ export default function ScoreSummary({
           <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
             <div className="text-xs uppercase tracking-wide text-gray-600">Leaderboard place</div>
             <div className="text-lg font-semibold text-neutral-900">{placementLabel}</div>
-            <button
+            {/* <button
               className="text-xs text-gray-700 underline underline-offset-4 hover:text-gray-900"
               onClick={onOpenLeaderboard}
             >
               View leaderboard
-            </button>
+            </button> */}
           </div>
         </div>
 
         <div className="space-y-3">
-          <div className="text-sm text-gray-700">Add your run to the public leaderboard</div>
+          <div className="text-sm text-gray-700">Add your run to the leaderboard</div>
           <div className="flex flex-col sm:flex-row items-center gap-3 justify-center">
             <input
               type="text"
@@ -83,12 +83,12 @@ export default function ScoreSummary({
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <button
+          {/* <button
             className="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-800 hover:bg-gray-50"
             onClick={onOpenLeaderboard}
           >
             See leaderboard
-          </button>
+          </button> */}
           <button
             className="px-5 py-2.5 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800"
             onClick={onPlayAgain}

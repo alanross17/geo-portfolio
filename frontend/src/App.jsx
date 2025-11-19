@@ -79,7 +79,6 @@ export default function App() {
     setResult(res.round)
     setRounds((prev) => [...prev, res.round])
     if (totals.finished) {
-      setSummaryOpen(true)
       refreshLeaderboard()
     }
   }
