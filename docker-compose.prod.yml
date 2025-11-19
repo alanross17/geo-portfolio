@@ -8,23 +8,25 @@ services:
     image: geo-portfolio:prod
     container_name: geo-portfolio
     restart: unless-stopped
-    ports:
-      - "8080:8080"
-    # networks:
-      # - proxy
+    # ports:
+    #   - "8080:8080"
+    networks:
+      - proxy
     environment:
       - DATABASE_URL=${DATABASE_URL}
-    # labels:
-      # - "traefik.enable=true"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.geo-portfolio.entrypoints=http"
+      - "traefik.http.routers.geo-portfolio.rule=Host(`explore.alanross.io`)"
+      - "traefik.http.middlewares.geo-portfolio-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.geo-portfolio.middlewares=geo-portfolio-https-redirect"
+      - "traefik.http.routers.geo-portfolio-secure.entrypoints=https"
+      - "traefik.http.routers.geo-portfolio-secure.rule=Host(`explore.alanross.io`)"
+      - "traefik.http.routers.geo-portfolio-secure.tls=true"
+      - "traefik.http.routers.geo-portfolio-secure.service=geo-portfolio"
+      - "traefik.http.services.geo-portfolio.loadbalancer.server.port=8080"
+      - "traefik.docker.network=proxy"
 
-      # # --- Replace SUBDOMAIN below ---
-      # - "traefik.http.routers.geo-portfolio.rule=Host(`SUBDOMAIN.alanross.io`)"
-      # - "traefik.http.routers.geo-portfolio.entrypoints=websecure"
-      # - "traefik.http.routers.geo-portfolio.tls.certresolver=letsencrypt"
-
-      # # Forward traffic to port 8080 in the container
-      # - "traefik.http.services.geo-portfolio.loadbalancer.server.port=8080"
-
-# networks:
-#   traefik:
-#     external: true
+networks:
+  proxy:
+    external: true

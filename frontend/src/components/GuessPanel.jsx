@@ -21,7 +21,7 @@ export default function GuessPanel({ onGuess, result }) {
   }, [map, result])
 
   return (
-    <div className="fixed bottom-4 right-4 w-[30vw] h-[30vh] min-w-[250px] min-h-[200px] rounded-xl overflow-hidden shadow-lg bg-white/80 backdrop-blur-sm">
+    <div className="fixed bottom-4 right-4 w-[30vw] h-[30vh] min-w-[250px] min-h-[200px] rounded-xl overflow-hidden shadow-lg bg-white/85 backdrop-blur-sm border border-gray-200">
       <MapContainer
         center={[20, 0]}
         zoom={2}
@@ -40,12 +40,12 @@ export default function GuessPanel({ onGuess, result }) {
           </Marker>
         )}
       </MapContainer>
-      <div className="absolute bottom-0 left-0 right-0 bg-white/80 text-xs p-2 flex items-center justify-between">
+      <div className="absolute bottom-0 left-0 right-0 bg-white/90 text-xs p-2 flex items-center justify-between border-t border-gray-200 text-gray-700">
         <div>
           {picked ? `Picked: ${picked.lat.toFixed(2)}, ${picked.lng.toFixed(2)}` : "Click to drop a pin"}
         </div>
         <button
-          className="px-2 py-1 rounded bg-black text-white disabled:bg-gray-300"
+          className="px-2 py-1 rounded bg-neutral-900 text-white disabled:bg-gray-300 disabled:text-gray-600"
           disabled={!picked}
           onClick={()=>onGuess(picked)}
         >

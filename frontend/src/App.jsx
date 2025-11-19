@@ -129,7 +129,7 @@ export default function App() {
   }
 
   return (
-    <div className="relative w-full h-full overflow-hidden">
+    <div className="relative w-full h-full overflow-hidden font-body">
       {currentImage && (
         <PhotoCard image={currentImage} onToneChange={handleToneChange} />
       )}
@@ -142,16 +142,10 @@ export default function App() {
         onOpenLeaderboard={openLeaderboard}
         currentScore={totalScore}
         roundsPlayed={session?.roundsPlayed || 0}
+        roundsLimit={session?.roundLimit || 0}
         bonusTotal={bonusTotal}
         tone={overlayTone.topLeft}
       />
-      <div
-        className={`fixed top-4 left-1/2 -translate-x-1/2 text-sm ${
-          overlayTone.topLeft === "light" ? "text-black" : "text-white"
-        }`}
-      >
-        Photo {Math.min(session.roundsPlayed + 1, session.roundLimit)} / {session.roundLimit} — Session Score: {totalScore}
-      </div>
       <GuessPanel onGuess={onGuess} result={result} />
       <ResultOverlay
         result={result}
