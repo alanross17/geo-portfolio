@@ -83,20 +83,6 @@ export default function Header({
 
             {menuOpen && (
               <div className="absolute right-0 mt-3 w-60 rounded-2xl border border-gray-200 bg-white/95 text-gray-900 shadow-2xl backdrop-blur-sm">
-                <div className="border-b border-gray-200 px-4 py-4">
-                  <div className="text-[11px] uppercase tracking-[0.2em] text-gray-500">
-                    Current score
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-2 text-2xl font-semibold">
-                    <span>{currentScore.toLocaleString()}</span>
-                    <span className="text-sm text-gray-500">
-                      +{bonusTotal.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500">
-                    Rounds played: {roundsPlayed}
-                  </div>
-                </div>
                 <div className="py-1">
                   <button
                     className="w-full px-4 py-3 text-left text-sm font-medium text-gray-800 transition hover:bg-gray-50"
