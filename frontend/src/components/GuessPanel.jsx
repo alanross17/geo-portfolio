@@ -21,7 +21,10 @@ export default function GuessPanel({ onGuess, result }) {
   }, [map, result])
 
   return (
-    <div className="fixed bottom-4 right-4 w-[30vw] h-[30vh] min-w-[250px] min-h-[200px] rounded-xl overflow-hidden shadow-lg bg-white/85 backdrop-blur-sm border border-gray-200">
+    <div
+      className="fixed bottom-20 left-1/2 w-[92vw] max-w-xl h-[40vh] min-h-[240px] -translate-x-1/2 rounded-xl overflow-hidden shadow-lg bg-white/85 backdrop-blur-sm border border-gray-200
+                 md:bottom-4 md:left-auto md:right-4 md:w-[30vw] md:h-[30vh] md:min-w-[250px] md:min-h-[200px] md:translate-x-0"
+    >
       <MapContainer
         center={[20, 0]}
         zoom={2}
