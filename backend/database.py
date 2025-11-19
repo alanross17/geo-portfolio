@@ -46,7 +46,7 @@ def init_db(seed_file: str | None = None) -> None:
         if has_rows:
             return
 
-        with open(seed_file, "r", encoding="utf-8") as fh:
+        with open(seed_file, "r", encoding="utf8mb4") as fh:
             payload = json.load(fh)
 
         for item in payload:

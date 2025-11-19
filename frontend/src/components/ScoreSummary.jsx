@@ -78,7 +78,7 @@ export default function ScoreSummary({
             </button>
           </div>
           {hasSubmitted && (
-            <div className="text-xs text-gray-600">Your score is now visible to everyone.</div>
+            <div className="text-xs text-gray-600">Your score has been saved.</div>
           )}
         </div>
 
