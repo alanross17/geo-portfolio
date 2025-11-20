@@ -10,7 +10,7 @@ from flask_cors import CORS # type: ignore
 from sqlalchemy import select
 
 from database import Image, get_session, init_db
-from models import GameSession, LeaderboardEntry
+from models import GameSession, LeaderboardEntry, GuessLog
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -51,6 +51,29 @@ def build_public_url(relative_url: str) -> str:
         return f"{BASE_URL}/{rel}"
     return f"/{rel}"
 
+def get_client_ip() -> str | None:
+    # 1. Prefer Cloudflare header (if you’ve enabled it)
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip
+
+    # 2. Fall back to X-Forwarded-For (left-most is original client)
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+
+    # 3. Last resort
+    return request.remote_addr
+
+def get_client_geo_from_cf() -> dict:
+    # Values may be None if CF doesn’t provide them on your plan
+    return {
+        "country": request.headers.get("CF-IPCountry"),
+        "region": request.headers.get("CF-Region"),
+        "city": request.headers.get("CF-IPCity"),
+        "lat": request.headers.get("CF-IPLat"),
+        "lon": request.headers.get("CF-IPLon"),
+    }
 
 def serialize_image(image: Image) -> dict:
     return {
@@ -144,6 +167,25 @@ def current_image_for_session(game_session: GameSession, images_lookup: dict):
     img_id = order_ids[len(rounds)]
     return images_lookup.get(img_id)
 
+def record_guess(
+    session,
+    *,
+    session_id: str | None,
+    image_id: str,
+    guess_lat: float,
+    guess_lng: float,
+    distance_meters: float,
+):
+    log_entry = GuessLog(
+        session_id=session_id,
+        image_id=image_id,
+        guess_lat=guess_lat,
+        guess_lng=guess_lng,
+        distance_meters=round(distance_meters, 2),
+    )
+    session.add(log_entry)
+
+
 # All API Stuff
 @app.get("/api/images")
 def api_images():
@@ -198,6 +240,9 @@ def api_guess():
 
 @app.post("/api/session")
 def api_start_session():
+    client_ip = get_client_ip()
+    client_geo = get_client_geo_from_cf()
+
     with get_session() as session:
         order = choose_image_order(session)
         order_str = ",".join(order)
@@ -205,6 +250,12 @@ def api_start_session():
             id=uuid.uuid4().hex,
             image_order=order_str,
             round_limit=ROUND_LIMIT,
+            ip_address=client_ip,
+            country=client_geo.get("country"),
+            region=client_geo.get("region"),
+            city=client_geo.get("city"),
+            lat=client_geo.get("lat"),
+            lon=client_geo.get("lon"),
         )
         session.add(game_session)
         session.flush()
@@ -236,6 +287,15 @@ def api_session_guess(session_id):
         score = calc_score(dist_m)
         round_bonus = compute_bonus(dist_m)
         total_round_score = score + round_bonus
+
+        record_guess(
+            session,
+            session_id=game_session.id,
+            image_id=image.id,
+            guess_lat=guess["lat"],
+            guess_lng=guess["lng"],
+            distance_meters=dist_m,
+        )
 
         rounds = json.loads(game_session.rounds_json or "[]")
         rounds.append(
