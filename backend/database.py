@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from models import Base, GameSession, Image, LeaderboardEntry
+from models import Base, GameSession, GuessLog, Image, LeaderboardEntry
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_SQLITE_PATH = os.path.join(BASE_DIR, "images.db")

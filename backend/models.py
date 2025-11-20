@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, Mapped, mapped_column
 
 Base = declarative_base()
 
@@ -27,6 +27,14 @@ class GameSession(Base):
     finished = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
+    # User Info
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # IPv4/IPv6
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+
 
 class LeaderboardEntry(Base):
     __tablename__ = "leaderboard_entries"
@@ -35,4 +43,16 @@ class LeaderboardEntry(Base):
     name = Column(String(128), nullable=False)
     score = Column(Integer, nullable=False)
     session_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class GuessLog(Base):
+    __tablename__ = "guess_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(64), nullable=True)
+    image_id = Column(String(128), nullable=False)
+    guess_lat = Column(Float, nullable=False)
+    guess_lng = Column(Float, nullable=False)
+    distance_meters = Column(Float, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
