@@ -309,6 +309,7 @@ def api_session_guess(session_id):
                     "lng": image.lng,
                     "title": image.title,
                     "subtitle": image.subtitle,
+                    "igLink": image.ig_link,
                 },
                 "guess": {"lat": guess["lat"], "lng": guess["lng"]},
             }
