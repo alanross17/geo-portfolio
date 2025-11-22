@@ -12,6 +12,7 @@ class Image(Base):
     relative_url = Column(String(255), nullable=False)
     title = Column(String(255))
     subtitle = Column(String(255))
+    ig_link = Column(String(255))
     lat = Column(Float, nullable=False)
     lng = Column(Float, nullable=False)
 

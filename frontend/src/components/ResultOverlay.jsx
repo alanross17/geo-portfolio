@@ -52,6 +52,14 @@ export default function ResultOverlay({ result, onNext, bonusPoints, bonusRadius
           </div>
         )}
 
+        {result.solution?.igLink && (
+          <div className="text-neutral-500">
+            <a href={result.solution.igLink} target="_blank" rel="noopener noreferrer">
+              View Photo on Instagram
+            </a>
+          </div>
+        )}
+
         {result.guess && result.solution && (
           <div className="h-64 w-full overflow-hidden rounded-xl">
             <MapContainer

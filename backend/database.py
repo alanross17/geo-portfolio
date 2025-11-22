@@ -56,12 +56,15 @@ def init_db(seed_file: str | None = None) -> None:
                 relative_url = os.path.join("images", file_name)
             if not relative_url:
                 raise ValueError(f"Image entry {item.get('id')} is missing a relative URL")
+            
+            ig_link = item.get("ig_link") or item.get("ig_links") or item.get("igLink")
 
             image = Image(
                 id=item["id"],
                 relative_url=relative_url.strip("/"),
                 title=item.get("title"),
                 subtitle=item.get("subtitle"),
+                ig_link=ig_link,
                 lat=float(item["lat"]),
                 lng=float(item["lng"]),
             )
