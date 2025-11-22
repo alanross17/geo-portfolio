@@ -3,11 +3,12 @@ import random
 import uuid
 import logging
 import os
+from datetime import datetime, timedelta
 from math import radians, sin, cos, asin, sqrt, exp
 from typing import List
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS # type: ignore
-from sqlalchemy import select
+from sqlalchemy import delete, exists, select
 
 from database import Image, get_session, init_db
 from models import GameSession, LeaderboardEntry, GuessLog
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGES_PATH = os.path.join(BASE_DIR, "static", "images")
 FRONTEND_BUILD = os.path.join(BASE_DIR, "static", "app")
+
+UNUSED_SESSION_MAX_AGE_MINUTES = int(os.environ.get("UNUSED_SESSION_MAX_AGE_MINUTES", "60"))
+DB_PURGE_RUN_CHANCE = 0.05 # ~5% chance
 
 app = Flask(__name__, static_folder=FRONTEND_BUILD, static_url_path="/")
 
@@ -185,6 +189,24 @@ def record_guess(
     )
     session.add(log_entry)
 
+def maybe_purge_unused_sessions(session):
+    if random.random() < DB_PURGE_RUN_CHANCE:
+        purge_unused_sessions(session)
+
+def purge_unused_sessions(session) -> int:
+    """Delete stale sessions that never recorded a guess."""
+
+    cutoff = datetime.utcnow() - timedelta(minutes=UNUSED_SESSION_MAX_AGE_MINUTES)
+    stmt = delete(GameSession).where(
+        GameSession.created_at < cutoff,
+        ~exists().where(GuessLog.session_id == GameSession.id),
+    )
+    result = session.execute(stmt)
+    deleted_rows = result.rowcount or 0
+    if deleted_rows:
+        logger.info("Purged %s unused sessions", deleted_rows)
+    return deleted_rows
+
 
 # All API Stuff
 @app.get("/api/images")
@@ -244,6 +266,7 @@ def api_start_session():
     client_geo = get_client_geo_from_cf()
 
     with get_session() as session:
+        maybe_purge_unused_sessions(session)
         order = choose_image_order(session)
         order_str = ",".join(order)
         game_session = GameSession(
