@@ -80,6 +80,7 @@ def serialize_image(image: Image) -> dict:
         "id": image.id,
         "title": image.title,
         "subtitle": image.subtitle,
+        "igLink": image.ig_link,
         "url": build_public_url(image.relative_url),
     }
 
