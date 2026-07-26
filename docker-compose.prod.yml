@@ -14,6 +14,9 @@ services:
       - proxy
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-true}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.geo-portfolio.entrypoints=http"

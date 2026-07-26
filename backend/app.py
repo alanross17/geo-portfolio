@@ -6,12 +6,17 @@ import os
 from datetime import datetime, timedelta
 from math import radians, sin, cos, asin, sqrt, exp
 from typing import List
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session
 from flask_cors import CORS # type: ignore
 from sqlalchemy import delete, exists, select
 
 from database import Image, get_session, init_db
 from models import GameSession, LeaderboardEntry, GuessLog
+from admin import (
+    ValidationError, admin_configured, metadata_from_payload, parse_coordinates,
+    remove_stored_image, require_admin, save_uploaded_image, serialize_admin_image,
+    verify_password,
+)
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -23,11 +28,24 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGES_PATH = os.path.join(BASE_DIR, "static", "images")
 FRONTEND_BUILD = os.path.join(BASE_DIR, "static", "app")
+FRONTEND_ASSETS = os.path.join(FRONTEND_BUILD, "assets")
 
 UNUSED_SESSION_MAX_AGE_MINUTES = int(os.environ.get("UNUSED_SESSION_MAX_AGE_MINUTES", "60"))
 DB_PURGE_RUN_CHANCE = 0.05 # ~5% chance
 
-app = Flask(__name__, static_folder=FRONTEND_BUILD, static_url_path="/")
+
+# Frontend files have explicit routes below. A Flask static catch-all mounted at
+# ``/`` would intercept client-side routes such as /admin, while mounting the
+# whole build directory at /assets would look in the wrong directory for Vite's
+# generated /assets/* URLs.
+app = Flask(__name__, static_folder=None)
+app.config.update(
+    SECRET_KEY=os.environ.get("FLASK_SECRET_KEY"),
+    ADMIN_PASSWORD_HASH=os.environ.get("ADMIN_PASSWORD_HASH"),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "true").lower() == "true",
+)
 
 allowed_origins = [
     origin.strip()
@@ -210,6 +228,91 @@ def purge_unused_sessions(session) -> int:
 
 
 # All API Stuff
+@app.get("/api/admin/auth/status")
+def admin_auth_status():
+    return jsonify({"authenticated": bool(admin_configured() and session.get("is_admin"))})
+
+
+@app.post("/api/admin/auth/login")
+def admin_login():
+    if not admin_configured():
+        return jsonify({"error": "Admin authentication is not configured"}), 503
+    data = request.get_json(silent=True) or {}
+    if not verify_password(data.get("password")):
+        return jsonify({"error": "Invalid password"}), 401
+    session.clear()
+    session["is_admin"] = True
+    return jsonify({"authenticated": True})
+
+
+@app.post("/api/admin/auth/logout")
+@require_admin
+def admin_logout():
+    session.clear()
+    return jsonify({"authenticated": False})
+
+
+@app.get("/api/admin/images")
+@require_admin
+def admin_images():
+    with get_session() as db_session:
+        images = db_session.scalars(select(Image).order_by(Image.id)).all()
+        payload = [serialize_admin_image(image, build_public_url) for image in images]
+    return jsonify(payload)
+
+
+@app.post("/api/admin/images")
+@require_admin
+def admin_create_image():
+    try:
+        metadata = metadata_from_payload(request.form)
+        lat, lng = parse_coordinates(request.form.get("lat"), request.form.get("lng"))
+        stored_filename = save_uploaded_image(request.files.get("image"), IMAGES_PATH)
+    except ValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    image = Image(
+        id=uuid.uuid4().hex,
+        relative_url=f"images/{stored_filename}", lat=lat, lng=lng, **metadata,
+    )
+    try:
+        with get_session() as db_session:
+            db_session.add(image)
+            db_session.flush()
+            payload = serialize_admin_image(image, build_public_url)
+    except Exception:
+        remove_stored_image(IMAGES_PATH, stored_filename)
+        logger.exception("Admin image creation failed")
+        return jsonify({"error": "Unable to create photo"}), 500
+    return jsonify(payload), 201
+
+
+@app.patch("/api/admin/images/<image_id>")
+@require_admin
+def admin_update_image(image_id):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "A JSON object is required"}), 400
+    permitted = {"title", "subtitle", "igLink"}
+    unexpected = set(data) - permitted
+    if unexpected:
+        return jsonify({"error": "Only title, subtitle, and igLink may be updated"}), 400
+    try:
+        metadata = metadata_from_payload(data)
+    except ValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    with get_session() as db_session:
+        image = db_session.get(Image, image_id)
+        if not image:
+            return jsonify({"error": "Photo not found"}), 404
+        for field, value in metadata.items():
+            setattr(image, field, value)
+        db_session.flush()
+        payload = serialize_admin_image(image, build_public_url)
+    return jsonify(payload)
+
+
+
 @app.get("/api/images")
 def api_images():
     with get_session() as session:
@@ -434,12 +537,16 @@ def healthcheck():
 
 
 # (Optional) serve built frontend in production
+@app.get("/assets/<path:filename>")
+def serve_frontend_asset(filename):
+    return send_from_directory(FRONTEND_ASSETS, filename)
+
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_frontend(path):
     index_path = os.path.join(FRONTEND_BUILD, "index.html")
     if os.path.exists(index_path):
-        return app.send_static_file("index.html")
+        return send_from_directory(FRONTEND_BUILD, "index.html")
     return jsonify({"status": "frontend not built"}), 200
 
 if __name__ == "__main__":

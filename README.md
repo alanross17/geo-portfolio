@@ -33,6 +33,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 # Optional: point to MySQL
 export DATABASE_URL="mysql+pymysql://user:pass@host:3306/geo_portfolio"
+# Required to enable the unlinked /admin page (use a generated password hash).
+export FLASK_SECRET_KEY="a-long-random-secret"
+export ADMIN_PASSWORD_HASH="$(python -c 'from werkzeug.security import generate_password_hash; print(generate_password_hash("choose-a-password"))')"
 python app.py
 ```
 
@@ -70,6 +73,9 @@ This launches both the API (on port 8080) and the frontend (on port 5173). Set t
 3. Restart the backend and enjoy! 🌟
 
 To seed via JSON for quick demos, you can still place entries in `backend/images.json`; they are only imported automatically when the database is empty.
+
+### Admin settings
+The unlinked `/admin` route lets an administrator add photos and edit titles, subtitles, and Instagram links. It is only enabled when both `FLASK_SECRET_KEY` and `ADMIN_PASSWORD_HASH` are configured. The backend uses an HttpOnly, SameSite signed session cookie; set `SESSION_COOKIE_SECURE=false` only for local HTTP development. Uploaded JPEG, PNG, GIF, and WebP files are validated and stored in `backend/static/images/`, while their paths and metadata remain in the database.
 
 ## 📜 License
 This project is provided as-is for learning and fun. Feel free to adapt it to your needs.
