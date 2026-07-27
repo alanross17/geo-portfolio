@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGES_PATH = os.path.join(BASE_DIR, "static", "images")
+IMAGES_PATH = os.path.join(BASE_DIR, "media", "images")
 FRONTEND_BUILD = os.path.join(BASE_DIR, "static", "app")
 FRONTEND_ASSETS = os.path.join(FRONTEND_BUILD, "assets")
 

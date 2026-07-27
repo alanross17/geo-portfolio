@@ -12,6 +12,8 @@ services:
     #   - "8080:8080"
     networks:
       - proxy
+    volumes:
+      - ./data/images:/app/backend/media/images
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}

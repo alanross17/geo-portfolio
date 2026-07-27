@@ -17,3 +17,4 @@ node_modules
 # TEMP unitl better handling
 backend/static/images/*
 backend/images.json
+data/*
