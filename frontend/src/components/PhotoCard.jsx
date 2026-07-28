@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { buildSrcSet, getFallbackUrl, getImageIdentity } from "./responsiveImage.js"
 
 const SAMPLE_SIZE = 96
 const DEFAULT_TONE = { topLeft: "dark", bottomLeft: "dark" }
@@ -77,9 +78,17 @@ const determineToneFromImage = (imgElement) => {
   )
 }
 
-export default function PhotoCard({ image, onToneChange }) {
+// The photograph fills the viewport at every breakpoint, so 100vw describes its
+// rendered width rather than merely defaulting to the viewport width.
+export const GAME_IMAGE_SIZES = "100vw"
+
+function GameImage({ image, onToneChange }) {
   const [isLoaded, setIsLoaded] = useState(false)
   const imgRef = useRef(null)
+  const identity = getImageIdentity(image)
+  const webpSrcSet = buildSrcSet(image?.sources?.webp)
+  const jpegSrcSet = buildSrcSet(image?.sources?.jpeg)
+  const fallbackUrl = getFallbackUrl(image)
 
   useEffect(() => {
     if (!isLoaded || !imgRef.current) return
@@ -88,29 +97,60 @@ export default function PhotoCard({ image, onToneChange }) {
     if (onToneChange) {
       onToneChange(tones || DEFAULT_TONE)
     }
-  }, [isLoaded, image?.url, onToneChange])
+  }, [isLoaded, identity, onToneChange])
 
   useEffect(() => {
     setIsLoaded(false)
-  }, [image?.url])
+
+    const img = imgRef.current
+    if (img?.complete && img.naturalWidth > 0) setIsLoaded(true)
+  }, [identity])
+
+  const handleLoad = (event) => {
+    if (event.currentTarget === imgRef.current) setIsLoaded(true)
+  }
 
   return (
-    <div className="absolute inset-0">
-      {!isLoaded && (
+    <div
+      className={`game-photo absolute inset-0 bg-gray-900 ${isLoaded ? "game-photo--loaded" : ""}`}
+    >
+      {image?.placeholder ? (
+        <div>
+          <img
+            src={image.placeholder}
+            alt=""
+            aria-hidden="true"
+            className="game-photo__placeholder"
+          />
+          <div className="absolute inset-0 flex items-center justify-center text-white text-sm uppercase tracking-wide">
+            Loading photo…
+          </div>
+        </div>
+      ) : !isLoaded ? (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white text-sm uppercase tracking-wide">
           Loading photo…
         </div>
-      )}
-      <img
-        src={image.url}
-        crossOrigin="anonymous"
-        alt={image.title || "Photo"}
-        ref={imgRef}
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-          isLoaded ? "opacity-100" : "opacity-0"
-        }`}
-        onLoad={() => setIsLoaded(true)}
-      />
+      ) : null}
+      <picture>
+        {webpSrcSet && <source type="image/webp" srcSet={webpSrcSet} sizes={GAME_IMAGE_SIZES} />}
+        {jpegSrcSet && <source type="image/jpeg" srcSet={jpegSrcSet} sizes={GAME_IMAGE_SIZES} />}
+        <img
+          src={fallbackUrl}
+          sizes={webpSrcSet || jpegSrcSet ? GAME_IMAGE_SIZES : undefined}
+          crossOrigin="anonymous"
+          alt="Location to identify"
+          ref={imgRef}
+          className="game-photo__image"
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
+          onLoad={handleLoad}
+        />
+      </picture>
     </div>
   )
+}
+
+export default function PhotoCard({ image, onToneChange }) {
+  return <GameImage key={getImageIdentity(image)} image={image} onToneChange={onToneChange} />
 }

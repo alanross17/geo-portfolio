@@ -9,3 +9,37 @@
     @apply font-body antialiased text-neutral-900;
   }
 }
+
+@layer components {
+  .game-photo__placeholder,
+  .game-photo__image {
+    @apply absolute inset-0 h-full w-full object-cover;
+  }
+
+  .game-photo__placeholder {
+    filter: blur(18px);
+    opacity: 1;
+    transform: scale(1.04);
+    transition: opacity 300ms ease;
+  }
+
+  .game-photo__image {
+    opacity: 0;
+    transition: opacity 300ms ease;
+  }
+
+  .game-photo--loaded .game-photo__placeholder {
+    opacity: 0;
+  }
+
+  .game-photo--loaded .game-photo__image {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-photo__placeholder,
+  .game-photo__image {
+    transition-duration: 0ms;
+  }
+}

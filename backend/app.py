@@ -366,6 +366,7 @@ def serve_variant(image_id, variant, fmt):
     return response
 
 
+# Returns orignal image for a given ID, admin purposes only!
 @app.get("/api/admin/images/<image_id>/original")
 @require_admin
 def download_original(image_id):
@@ -399,6 +400,7 @@ def serve_image(filename):
         return serve_variant(image.image_uid, "large", "jpg")
     abort(404)
 
+# This method is left over from session/game persistance, confirm it is no longer used!
 @app.post("/api/guess")
 def api_guess():
     data = request.get_json(silent=True)
