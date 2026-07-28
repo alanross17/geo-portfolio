@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, Numeric, String, Text
 from sqlalchemy.orm import declarative_base, Mapped, mapped_column
 
 Base = declarative_base()
@@ -10,6 +10,16 @@ class Image(Base):
 
     id = Column(String(128), primary_key=True)
     relative_url = Column(String(255), nullable=False)
+    image_uid = Column(String(32), unique=True, index=True, nullable=True)
+    original_filename = Column(String(255), nullable=True)
+    original_format = Column(String(16), nullable=True)
+    original_location = Column(String(255), nullable=True)
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+    aspect_ratio = Column(Numeric(16, 8), nullable=True)
+    generated_variants = Column(Text, nullable=True)
+    processing_status = Column(String(32), nullable=True)
+    processing_version = Column(Integer, nullable=True)
     title = Column(String(255))
     subtitle = Column(String(255))
     ig_link = Column(String(255))

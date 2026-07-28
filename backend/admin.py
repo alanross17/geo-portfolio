@@ -2,21 +2,12 @@
 
 from __future__ import annotations
 
-import imghdr
-import os
-import uuid
 from functools import wraps
-from pathlib import Path
 from urllib.parse import urlparse
 
 from flask import current_app, jsonify, request, session
 from werkzeug.security import check_password_hash
-from werkzeug.utils import secure_filename
 
-from models import Image
-
-
-ALLOWED_IMAGE_TYPES = {"jpeg": "jpg", "png": "png", "gif": "gif", "webp": "webp"}
 MAX_TEXT_LENGTH = 255
 
 
@@ -42,7 +33,13 @@ def require_admin(view):
 
 def verify_password(password: object) -> bool:
     password_hash = current_app.config.get("ADMIN_PASSWORD_HASH")
-    return isinstance(password, str) and bool(password_hash) and check_password_hash(password_hash, password)
+
+    return (
+        isinstance(password, str)
+        and isinstance(password_hash, str)
+        and bool(password_hash)
+        and check_password_hash(password_hash, password)
+    )
 
 
 def normalize_optional_text(value: object, field_name: str) -> str | None:
@@ -81,47 +78,4 @@ def metadata_from_payload(payload: dict) -> dict:
         "title": normalize_optional_text(payload.get("title"), "Title"),
         "subtitle": normalize_optional_text(payload.get("subtitle"), "Subtitle"),
         "ig_link": validate_instagram_link(payload.get("igLink")),
-    }
-
-
-def save_uploaded_image(upload, images_path: str) -> str:
-    if not upload or not upload.filename:
-        raise ValidationError("An image file is required")
-    filename = secure_filename(upload.filename)
-    if not filename:
-        raise ValidationError("The uploaded filename is invalid")
-
-    # Inspect image content rather than accepting a browser-provided MIME type.
-    image_type = imghdr.what(upload.stream)
-    upload.stream.seek(0)
-    if image_type not in ALLOWED_IMAGE_TYPES:
-        raise ValidationError("Unsupported image type. Use JPEG, PNG, GIF, or WebP")
-
-    extension = ALLOWED_IMAGE_TYPES[image_type]
-    stored_filename = f"{uuid.uuid4().hex}.{extension}"
-    Path(images_path).mkdir(parents=True, exist_ok=True)
-    destination = os.path.join(images_path, stored_filename)
-    try:
-        upload.save(destination)
-    except OSError as exc:
-        raise ValidationError("Unable to store the uploaded image") from exc
-    return stored_filename
-
-
-def remove_stored_image(images_path: str, stored_filename: str) -> None:
-    try:
-        os.remove(os.path.join(images_path, stored_filename))
-    except FileNotFoundError:
-        pass
-
-
-def serialize_admin_image(image: Image, build_public_url) -> dict:
-    return {
-        "id": image.id,
-        "title": image.title,
-        "subtitle": image.subtitle,
-        "igLink": image.ig_link,
-        "url": build_public_url(image.relative_url),
-        "lat": image.lat,
-        "lng": image.lng,
     }

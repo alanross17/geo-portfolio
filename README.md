@@ -65,12 +65,53 @@ This launches both the API (on port 8080) and the frontend (on port 5173). Set t
 - `GET /api/session/<session_id>/summary` – fetch the full summary for a session (totals and all rounds)
 - `GET /api/leaderboard` – retrieve the top leaderboard entries
 - `POST /api/leaderboard` – submit a finished session score to the leaderboard
-- Images are served from `/images/<filename>`
+- Responsive images are served from `/images/<image-id>/<variant>.<jpg|webp>`
 
 ## 🖼️ Adding Your Own Photos
-1. Drop images into `backend/static/images/`
+1. Drop images into `data/images/`
 2. Insert a new row into the `images` table with fields: `id`, `relative_url` (e.g. `images/my-photo.jpg`), `lat`, `lng`, and optional `title`/`subtitle`
 3. Restart the backend and enjoy! 🌟
+
+> New installations should use the admin upload rather than inserting files
+> directly. The manual steps above describe only the legacy catalog format.
+
+## Responsive image storage and rollout
+
+Admin uploads keep the untouched bytes at
+`originals/<image-id>/original.<source-extension>` and generated public files at
+`variants/<image-id>/<variant>.<format>` beneath `IMAGE_STORAGE_ROOT` (default
+`backend/media/images`). Random UUID-hex IDs prevent filename collisions.
+
+The manifest in `backend/image_processing.py` defines placeholder (40), thumb
+(320), small (640), medium (1280), large (1920), and xlarge (2560) long edges.
+Images are EXIF-oriented and never enlarged; xlarge is only made above 1920 px.
+JPEG is progressive at quality 86, WebP uses quality 84/method 6, and the JPEG
+placeholder uses quality 35. Public files omit EXIF/GPS/ICC metadata and JPEG
+alpha is composited on white; the original remains byte-for-byte unchanged.
+
+Resources expose `id`, dimensions, numeric `aspectRatio`, `placeholder`, grouped
+`sources`, and `fallbackUrl`. Transitional `url` aliases the large (or largest)
+JPEG. Admin responses add original filename/format, status/version, and an
+authenticated `/api/admin/images/<image-id>/original` URL, but never paths.
+
+```bash
+flask --app app migrate-images --dry-run
+flask --app app migrate-images
+flask --app app migrate-images --regenerate
+```
+
+Migration is per-record, restartable, preserves stable IDs and legacy files,
+continues after failures, and returns non-zero for any failure. Roll back with a
+database backup and retained legacy files. Increment `PROCESSING_VERSION` and run
+`--regenerate` after future manifest changes. The database-guarded legacy
+`/images/<filename>` route remains temporarily and logs use.
+
+Current compatibility consumers: `frontend/src/components/PhotoCard.jsx` reads
+`image.url`; it must move to `<picture>` with `sources`, `fallbackUrl`, and
+`placeholder`. `backend/app.py` contains the deprecated filename route and now
+uses `backend/image_resources.py` for both public and admin resources. The former
+serializers in `backend/app.py` and `backend/admin.py` have been consolidated.
+Remove the alias, route, and legacy `relative_url` only after logs show no use.
 
 To seed via JSON for quick demos, you can still place entries in `backend/images.json`; they are only imported automatically when the database is empty.
 

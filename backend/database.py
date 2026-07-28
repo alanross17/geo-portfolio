@@ -2,7 +2,7 @@ import json
 import os
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base, GameSession, GuessLog, Image, LeaderboardEntry
@@ -37,6 +37,20 @@ def get_session() -> Session:
 def init_db(seed_file: str | None = None) -> None:
     """Create tables and optionally seed from a JSON file when empty."""
     Base.metadata.create_all(bind=engine)
+    # This project historically used create_all without Alembic. Keep existing
+    # installations bootable while the checked-in SQL migration is deployed.
+    existing = {column["name"] for column in inspect(engine).get_columns("images")}
+    additions = {
+        "image_uid": "VARCHAR(32)", "original_filename": "VARCHAR(255)",
+        "original_format": "VARCHAR(16)", "original_location": "VARCHAR(255)",
+        "width": "INTEGER", "height": "INTEGER", "aspect_ratio": "NUMERIC(16,8)",
+        "generated_variants": "TEXT", "processing_status": "VARCHAR(32)",
+        "processing_version": "INTEGER",
+    }
+    with engine.begin() as connection:
+        for name, sql_type in additions.items():
+            if name not in existing:
+                connection.execute(text(f"ALTER TABLE images ADD COLUMN {name} {sql_type}"))
 
     if not seed_file or not os.path.exists(seed_file):
         return
