@@ -106,13 +106,6 @@ database backup and retained legacy files. Increment `PROCESSING_VERSION` and ru
 `--regenerate` after future manifest changes. The database-guarded legacy
 `/images/<filename>` route remains temporarily and logs use.
 
-Current compatibility consumers: `frontend/src/components/PhotoCard.jsx` reads
-`image.url`; it must move to `<picture>` with `sources`, `fallbackUrl`, and
-`placeholder`. `backend/app.py` contains the deprecated filename route and now
-uses `backend/image_resources.py` for both public and admin resources. The former
-serializers in `backend/app.py` and `backend/admin.py` have been consolidated.
-Remove the alias, route, and legacy `relative_url` only after logs show no use.
-
 To seed via JSON for quick demos, you can still place entries in `backend/images.json`; they are only imported automatically when the database is empty.
 
 ### Admin settings
