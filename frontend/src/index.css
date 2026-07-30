@@ -11,16 +11,34 @@
 }
 
 @layer components {
+  .game-photo {
+    @apply overflow-hidden;
+  }
+
+  .game-photo__loading-layer,
   .game-photo__placeholder,
   .game-photo__image {
     @apply absolute inset-0 h-full w-full object-cover;
   }
 
+  .game-photo__loading-layer {
+    @apply bg-gray-900;
+    opacity: 1;
+    transition: opacity 300ms ease;
+  }
+
+  .game-photo__placeholder,
+  .game-photo__image {
+    @apply object-cover;
+  }
+
   .game-photo__placeholder {
     filter: blur(18px);
-    opacity: 1;
     transform: scale(1.04);
-    transition: opacity 300ms ease;
+  }
+
+  .game-photo__loading-text {
+    @apply absolute inset-0 flex items-center justify-center text-sm uppercase tracking-wide text-white;
   }
 
   .game-photo__image {
@@ -28,8 +46,9 @@
     transition: opacity 300ms ease;
   }
 
-  .game-photo--loaded .game-photo__placeholder {
+  .game-photo--loaded .game-photo__loading-layer {
     opacity: 0;
+    pointer-events: none;
   }
 
   .game-photo--loaded .game-photo__image {
@@ -38,7 +57,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .game-photo__placeholder,
+  .game-photo__loading-layer,
   .game-photo__image {
     transition-duration: 0ms;
   }

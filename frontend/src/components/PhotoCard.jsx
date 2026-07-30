@@ -114,23 +114,25 @@ function GameImage({ image, onToneChange }) {
     <div
       className={`game-photo absolute inset-0 bg-gray-900 ${isLoaded ? "game-photo--loaded" : ""}`}
     >
-      {image?.placeholder ? (
-        <div>
-          <img
+      <div className="game-photo__loading-layer">
+        {image?.placeholder && (
+          <img 
             src={image.placeholder}
             alt=""
             aria-hidden="true"
-            className="game-photo__placeholder"
+            className="photo__placeholder"
           />
-          <div className="absolute inset-0 flex items-center justify-center text-white text-sm uppercase tracking-wide">
-            Loading photo…
-          </div>
-        </div>
-      ) : !isLoaded ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white text-sm uppercase tracking-wide">
+        )}
+
+        <div
+          className="game-photo__loading-text"
+          role="status"
+          aria-live="polite"
+        >
           Loading photo…
         </div>
-      ) : null}
+      </div>
+
       <picture>
         {webpSrcSet && <source type="image/webp" srcSet={webpSrcSet} sizes={GAME_IMAGE_SIZES} />}
         {jpegSrcSet && <source type="image/jpeg" srcSet={jpegSrcSet} sizes={GAME_IMAGE_SIZES} />}
