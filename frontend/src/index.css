@@ -17,7 +17,8 @@
 
   .game-photo__loading-layer,
   .game-photo__placeholder,
-  .game-photo__image {
+  .game-photo__image,
+  .game-photo__error {
     @apply absolute inset-0 h-full w-full object-cover;
   }
 
@@ -46,7 +47,12 @@
     transition: opacity 300ms ease;
   }
 
-  .game-photo--loaded .game-photo__loading-layer {
+  .game-photo__error {
+    @apply flex flex-col items-center justify-center bg-gray-900 px-6 text-center text-white;
+  }
+
+  .game-photo--loaded .game-photo__loading-layer,
+  .game-photo--error .game-photo__loading-layer {
     opacity: 0;
     pointer-events: none;
   }
