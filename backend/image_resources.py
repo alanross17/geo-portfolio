@@ -8,9 +8,18 @@ def build_image_resource(image, build_public_url, *, admin=False):
     variants = json.loads(image.generated_variants or "[]")
     sources = {"webp": [], "jpeg": []}
     placeholder = None
+
+    if not image.image_uid:
+        raise ValueError("Image has no image_uid")
+
+    if not image.variant_generation:
+        raise ValueError(
+            f"Image {image.image_uid} has no published variant generation"
+        )
+
     for item in variants:
         ext = "jpg" if item["format"] == "jpeg" else item["format"]
-        url = build_public_url(f"images/{image.image_uid}/{item['variant']}.{ext}")
+        url = build_public_url(f"images/{image.image_uid}/{image.variant_generation}/{item['variant']}.{ext}")
         if item["variant"] == "placeholder":
             placeholder = url
         elif item["format"] in sources:
@@ -42,5 +51,6 @@ def build_image_resource(image, build_public_url, *, admin=False):
             "originalDownloadUrl": (build_public_url(f"api/admin/images/{image.image_uid}/original")
                                     if image.image_uid else None),
             "processingStatus": image.processing_status,
-            "processingVersion": image.processing_version})
+            "processingVersion": image.processing_version,
+            "variantGeneration": image.variant_generation,})
     return resource

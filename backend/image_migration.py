@@ -1,7 +1,6 @@
 """Restartable migration of database-known legacy images."""
 from __future__ import annotations
 
-import json
 import os
 import uuid
 from pathlib import Path
@@ -28,7 +27,8 @@ def register_image_migration(app, storage_root):
                     image = session.get(Image, record_id)
                     complete = (image.image_uid and image.processing_status == "ready" and
                                 image.processing_version == PROCESSING_VERSION and
-                                image.generated_variants)
+                                image.generated_variants and
+                                image.variant_generation)
                     if complete and not regenerate:
                         counts["skipped"] += 1
                         click.echo(f"SKIP {record_id}: already migrated")
@@ -38,10 +38,12 @@ def register_image_migration(app, storage_root):
                     source = None
                     if image.original_location:
                         candidate = Path(storage_root).joinpath(*image.original_location.split("/"))
+                        click.echo(candidate)
                         if candidate.is_file():
                             source = candidate
                     if source is None:
                         candidate = Path(storage_root) / legacy_name
+                        click.echo(candidate)
                         if candidate.is_file():
                             source = candidate
                     if source is None:
@@ -54,6 +56,7 @@ def register_image_migration(app, storage_root):
                         image.original_filename or legacy_name,
                         replace_original=not bool(image.original_location))
                     image.image_uid = image_uid
+                    image.variant_generation = result.generation
                     image.original_filename = result.original_filename
                     image.original_format = result.original_format
                     image.original_location = result.original_location

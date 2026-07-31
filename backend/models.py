@@ -17,6 +17,7 @@ class Image(Base):
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
     aspect_ratio = Column(Numeric(16, 8), nullable=True)
+    variant_generation = Column(String(32), nullable=True)
     generated_variants = Column(Text, nullable=True)
     processing_status = Column(String(32), nullable=True)
     processing_version = Column(Integer, nullable=True)

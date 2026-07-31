@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 import warnings
+import logging
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -37,6 +39,8 @@ ALLOWED_PIL_FORMATS = ("JPEG", "PNG", "WEBP")
 MAX_SOURCE_BYTES = 50 * 1024 * 1024
 COPY_CHUNK_SIZE = 1024 * 1024
 
+GENERATION_PATTERN = re.compile(r"^[a-f0-9]{32}$")
+
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 warnings.simplefilter("error", Image.DecompressionBombWarning)
 
@@ -56,6 +60,7 @@ class GeneratedVariant:
 @dataclass(frozen=True)
 class ProcessingResult:
     image_id: str
+    generation: str
     original_filename: str
     original_format: str
     original_location: str
@@ -73,6 +78,12 @@ def valid_image_id(value: str) -> bool:
         return len(value) == 32 and uuid.UUID(hex=value).hex == value.lower()
     except (ValueError, AttributeError):
         return False
+
+def valid_generation(value: str) -> bool:
+    return bool(
+        isinstance(value, str)
+        and GENERATION_PATTERN.fullmatch(value)
+    )
 
 
 def validate_dimensions(image: Image.Image) -> None:
@@ -117,10 +128,14 @@ def original_path(storage_root: str | Path, image_id: str, extension: str) -> Pa
     return Path(storage_root) / "originals" / image_id / f"original.{extension}"
 
 
-def variant_path(storage_root: str | Path, image_id: str, variant: str, fmt: str) -> Path:
-    if not valid_image_id(image_id) or variant not in VARIANT_MANIFEST or fmt not in VARIANT_MANIFEST[variant]["formats"]:
+def variant_path(storage_root: str | Path, image_id: str, generation: str, variant: str, fmt: str) -> Path:
+    if (not valid_image_id(image_id) or 
+        not valid_generation(generation) or 
+        variant not in VARIANT_MANIFEST or 
+        fmt not in VARIANT_MANIFEST[variant]["formats"]
+        ):
         raise ValueError("invalid variant key")
-    return Path(storage_root) / "variants" / image_id / f"{variant}.{FORMAT_EXTENSIONS[fmt]}"
+    return Path(storage_root) / "variants" / image_id / generation / f"{variant}.{FORMAT_EXTENSIONS[fmt]}"
 
 
 def _public_image(image: Image.Image, fmt: str) -> Image.Image:
@@ -138,10 +153,13 @@ def process_image(source, storage_root: str | Path, image_id: str, original_file
     """Validate ``source``, preserve it unchanged, and atomically publish variants."""
     if not valid_image_id(image_id):
         raise ImageProcessingError("Invalid image identifier")
+
+    generation = uuid.uuid4().hex
+
     root = Path(storage_root)
     staging = root / ".staging" / f"{image_id}-{uuid.uuid4().hex}"
     staging_original = staging / "originals" / image_id
-    staging_variants = staging / "variants" / image_id
+    staging_variants = staging / "variants" / image_id / generation
     try:
         staging_original.mkdir(parents=True)
         staging_variants.mkdir(parents=True)
@@ -171,7 +189,7 @@ def process_image(source, storage_root: str | Path, image_id: str, original_file
                 source_format = (decoded.format or "").upper()
                 if source_format not in SOURCE_EXTENSIONS:
                     raise ImageProcessingError(
-                        "Unsupported image type. Use JPEG, PNG, GIF, or WebP"
+                        "Unsupported image type. Use JPEG, PNG, or WebP"
                     )
 
                 oriented = ImageOps.exif_transpose(decoded)
@@ -212,30 +230,34 @@ def process_image(source, storage_root: str | Path, image_id: str, original_file
                            {"quality": WEBP_QUALITY, "method": 6})
                 public.save(destination, format="JPEG" if fmt == "jpeg" else "WEBP", **options)
                 generated.append(GeneratedVariant(name, fmt, public.width, public.height,
-                    f"variants/{image_id}/{name}.{ext}"))
+                    f"variants/{image_id}/{generation}/{name}.{ext}"))
 
         final_original_dir = root / "originals" / image_id
-        final_variant_dir = root / "variants" / image_id
+        final_generation_dir = (
+            root
+            / "variants"
+            / image_id
+            / generation
+        )
         final_original_dir.parent.mkdir(parents=True, exist_ok=True)
-        final_variant_dir.parent.mkdir(parents=True, exist_ok=True)
+        final_generation_dir.parent.mkdir(parents=True, exist_ok=True)
+
+        # generation version directory should be unique, error out if exisits
+        if final_generation_dir.exists():
+            raise ImageProcessingError(
+                f"Variant generation already exists: {generation}"
+            )
         # Variants are swapped only after every encode succeeds. Existing originals
         # remain untouched during regeneration.
         if replace_original or not final_original_dir.exists():
             if final_original_dir.exists():
                 shutil.rmtree(final_original_dir)
             os.replace(staging_original, final_original_dir)
-        backup = staging / "old-variants"
-        had_variants = final_variant_dir.exists()
-        if had_variants:
-            os.replace(final_variant_dir, backup)
-        try:
-            os.replace(staging_variants, final_variant_dir)
-        except Exception:
-            if had_variants and backup.exists():
-                os.replace(backup, final_variant_dir)
-            raise
+
+        os.replace(staging_variants, final_generation_dir)
+
         shutil.rmtree(staging, ignore_errors=True)
-        return ProcessingResult(image_id, Path(original_filename).name, source_format,
+        return ProcessingResult(image_id, generation, Path(original_filename).name, source_format,
             f"originals/{image_id}/original.{extension}", width, height, width / height,
             tuple(generated))
     except ImageProcessingError:

@@ -63,6 +63,7 @@ def init_db(seed_file: str | None = None) -> None:
         "generated_variants": "TEXT",
         "processing_status": "VARCHAR(32)",
         "processing_version": "INTEGER",
+        "variant_generation": "VARCHAR(32)",
     }
 
     with engine.begin() as connection:

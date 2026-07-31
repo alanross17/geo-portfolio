@@ -294,11 +294,17 @@ def admin_create_image():
         return jsonify({"error": str(exc)}), 400
 
     image = Image(
-        id=image_uid, image_uid=image_uid, relative_url=f"images/{image_uid}/large.jpg",
-        original_filename=result.original_filename, original_format=result.original_format,
-        original_location=result.original_location, width=result.width, height=result.height,
-        aspect_ratio=result.aspect_ratio, generated_variants=result.variants_json(),
-        processing_status="ready", processing_version=PROCESSING_VERSION,
+        id=image_uid, image_uid=image_uid, 
+        relative_url=f"images/{image_uid}/{result.generation}/large.jpg", 
+        variant_generation = result.generation,
+        original_filename=result.original_filename, 
+        original_format=result.original_format,
+        original_location=result.original_location, 
+        width=result.width, height=result.height,
+        aspect_ratio=result.aspect_ratio, 
+        generated_variants=result.variants_json(),
+        processing_status="ready", 
+        processing_version=PROCESSING_VERSION,
         lat=lat, lng=lng, **metadata,
     )
     try:
@@ -358,23 +364,41 @@ def api_image(image_id):
 
 # Immutable public derivatives. Flask converters plus allowlists ensure route
 # components can never become arbitrary filesystem paths.
-@app.get("/images/<image_id>/<variant>.<fmt>")
-def serve_variant(image_id, variant, fmt):
+@app.get("/images/<image_id>/<generation>/<variant>.<fmt>")
+def serve_variant(image_id, generation, variant, fmt):
+
     logical_format = "jpeg" if fmt == "jpg" else fmt
-    if (not valid_image_id(image_id) or variant not in VARIANT_MANIFEST or
-            variant == "original" or logical_format not in FORMAT_EXTENSIONS or
-            logical_format not in VARIANT_MANIFEST[variant]["formats"]):
+
+    if (not valid_image_id(image_id) or 
+        variant not in VARIANT_MANIFEST or
+        variant == "original" or 
+        logical_format not in FORMAT_EXTENSIONS or
+        logical_format not in VARIANT_MANIFEST[variant]["formats"]
+    ):
         abort(404)
+
     with get_session() as db_session:
-        image = db_session.scalar(select(Image).where(Image.image_uid == image_id))
+        image = db_session.scalar(
+            select(Image).where(Image.image_uid == image_id)
+        )
+
     if not image:
         abort(404)
+
     try:
-        path = variant_path(IMAGES_PATH, image_id, variant, logical_format)
+        path = variant_path(
+            IMAGES_PATH, 
+            image_id, 
+            generation, 
+            variant, 
+            logical_format
+        )
     except ValueError:
         abort(404)
+
     if not path.is_file():
         abort(404)
+
     response = send_file(path, mimetype="image/jpeg" if logical_format == "jpeg" else "image/webp")
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response
