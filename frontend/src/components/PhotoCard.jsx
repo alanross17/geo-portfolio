@@ -177,6 +177,7 @@ function GameImage({ image, onToneChange }) {
           fetchPriority="high"
           decoding="async"
           onLoad={handleLoad}
+          onError={handleError}
         />
       </picture>
 
