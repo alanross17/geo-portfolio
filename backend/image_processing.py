@@ -11,6 +11,7 @@ import shutil
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import warnings
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -24,11 +25,20 @@ VARIANT_MANIFEST = {
     "xlarge": {"long_edge": 2560, "formats": ("jpeg", "webp"), "minimum_source_edge": 1921},
 }
 FORMAT_EXTENSIONS = {"jpeg": "jpg", "webp": "webp"}
-SOURCE_EXTENSIONS = {"JPEG": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp"}
+SOURCE_EXTENSIONS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
 JPEG_QUALITY = 86
 WEBP_QUALITY = 84
 PLACEHOLDER_QUALITY = 35
 
+MAX_IMAGE_PIXELS = 60_000_000
+MAX_IMAGE_DIMENSION = 20_000
+ALLOWED_PIL_FORMATS = ("JPEG", "PNG", "WEBP")
+
+MAX_SOURCE_BYTES = 50 * 1024 * 1024
+COPY_CHUNK_SIZE = 1024 * 1024
+
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+warnings.simplefilter("error", Image.DecompressionBombWarning)
 
 class ImageProcessingError(ValueError):
     """A safe, user-facing processing failure."""
@@ -63,6 +73,42 @@ def valid_image_id(value: str) -> bool:
         return len(value) == 32 and uuid.UUID(hex=value).hex == value.lower()
     except (ValueError, AttributeError):
         return False
+
+
+def validate_dimensions(image: Image.Image) -> None:
+    width, height = image.size
+
+    if width <= 0 or height <= 0:
+        raise ImageProcessingError("The image has invalid dimensions")
+
+    if width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
+        raise ImageProcessingError(
+            f"Image dimensions cannot exceed "
+            f"{MAX_IMAGE_DIMENSION:,} pixels on either side"
+        )
+
+    if width * height > MAX_IMAGE_PIXELS:
+        raise ImageProcessingError(
+            f"Image resolution cannot exceed "
+            f"{MAX_IMAGE_PIXELS // 1_000_000} megapixels"
+        )
+
+def copy_upload_with_limit(source, destination: Path) -> None:
+    total = 0
+
+    with destination.open("wb") as output:
+        while True:
+            chunk = source.read(COPY_CHUNK_SIZE)
+            if not chunk:
+                break
+
+            total += len(chunk)
+            if total > MAX_SOURCE_BYTES:
+                raise ImageProcessingError(
+                    "Image file exceeds the 50 MB upload limit"
+                )
+
+            output.write(chunk)
 
 
 def original_path(storage_root: str | Path, image_id: str, extension: str) -> Path:
@@ -102,22 +148,49 @@ def process_image(source, storage_root: str | Path, image_id: str, original_file
         incoming = staging / "upload"
         if hasattr(source, "read"):
             source.seek(0)
-            with incoming.open("wb") as output:
-                shutil.copyfileobj(source, output)
+            copy_upload_with_limit(source, incoming)
             source.seek(0)
         else:
-            shutil.copyfile(source, incoming)
+            source_path = Path(source)
+
+            if source_path.stat().st_size > MAX_SOURCE_BYTES:
+                raise ImageProcessingError(
+                    "Image file exceeds the 50 MB upload limit"
+                )
+
+            shutil.copyfile(source_path, incoming)
 
         try:
-            with Image.open(incoming) as decoded:
+            with Image.open(incoming, formats=ALLOWED_PIL_FORMATS) as decoded:
+                validate_dimensions(decoded)
                 decoded.verify()
-            with Image.open(incoming) as decoded:
+
+            with Image.open(incoming, formats=ALLOWED_PIL_FORMATS) as decoded:
+                validate_dimensions(decoded)
+
                 source_format = (decoded.format or "").upper()
                 if source_format not in SOURCE_EXTENSIONS:
-                    raise ImageProcessingError("Unsupported image type. Use JPEG, PNG, GIF, or WebP")
-                oriented = ImageOps.exif_transpose(decoded).copy()
-        except (UnidentifiedImageError, OSError, SyntaxError) as exc:
-            raise ImageProcessingError("The uploaded file is not a readable image") from exc
+                    raise ImageProcessingError(
+                        "Unsupported image type. Use JPEG, PNG, GIF, or WebP"
+                    )
+
+                oriented = ImageOps.exif_transpose(decoded)
+                oriented.load()
+                oriented = oriented.copy()
+
+        except (
+            Image.DecompressionBombWarning,
+            Image.DecompressionBombError,
+        ) as exc:
+            raise ImageProcessingError(
+                "The image dimensions are too large"
+            ) from exc
+
+        except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as exc:
+            raise ImageProcessingError(
+                "The uploaded file is not a readable image"
+            ) from exc
+
 
         extension = SOURCE_EXTENSIONS[source_format]
         staged_original_file = staging_original / f"original.{extension}"

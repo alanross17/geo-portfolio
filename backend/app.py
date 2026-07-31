@@ -9,6 +9,7 @@ from typing import List
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory, session
 from flask_cors import CORS # type: ignore
 from sqlalchemy import delete, exists, or_, select
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from database import Image, get_session, init_db
 from models import GameSession, LeaderboardEntry, GuessLog
@@ -37,6 +38,8 @@ FRONTEND_ASSETS = os.path.join(FRONTEND_BUILD, "assets")
 UNUSED_SESSION_MAX_AGE_MINUTES = int(os.environ.get("UNUSED_SESSION_MAX_AGE_MINUTES", "60"))
 DB_PURGE_RUN_CHANCE = 0.05 # ~5% chance
 
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MiB
+
 
 # Frontend files have explicit routes below. A Flask static catch-all mounted at
 # ``/`` would intercept client-side routes such as /admin, while mounting the
@@ -48,7 +51,10 @@ app.config.update(
     ADMIN_PASSWORD_HASH=os.environ.get("ADMIN_PASSWORD_HASH"),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "true").lower() == "true",
+    SESSION_COOKIE_SECURE=os.environ.get(
+        "SESSION_COOKIE_SECURE", "true"
+    ).lower() == "true",
+    MAX_CONTENT_LENGTH=MAX_UPLOAD_SIZE,
 )
 
 allowed_origins = [
@@ -227,6 +233,14 @@ def purge_unused_sessions(session) -> int:
     if deleted_rows:
         logger.info("Purged %s unused sessions", deleted_rows)
     return deleted_rows
+
+
+# Error handler code
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_too_large(exc):
+    return jsonify({
+        "error": "Image upload is too large. The maximum size is 50 MB."
+    }), 413
 
 
 # All API Stuff
