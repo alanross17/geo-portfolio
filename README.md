@@ -109,7 +109,7 @@ database backup and retained legacy files. Increment `PROCESSING_VERSION` and ru
 To seed via JSON for quick demos, you can still place entries in `backend/images.json`; they are only imported automatically when the database is empty.
 
 ### Admin settings
-The unlinked `/admin` route lets an administrator add photos and edit titles, subtitles, and Instagram links. It is only enabled when both `FLASK_SECRET_KEY` and `ADMIN_PASSWORD_HASH` are configured. The backend uses an HttpOnly, SameSite signed session cookie; set `SESSION_COOKIE_SECURE=false` only for local HTTP development. Uploaded JPEG, PNG, GIF, and WebP files are validated and stored in `backend/static/images/`, while their paths and metadata remain in the database.
+The unlinked `/admin` route lets an administrator add photos and edit titles, subtitles, and Instagram links. It is only enabled when both `FLASK_SECRET_KEY` and `ADMIN_PASSWORD_HASH` are configured. The backend uses an HttpOnly, SameSite signed session cookie; set `SESSION_COOKIE_SECURE=false` only for local HTTP development. Uploaded JPEG, PNG, and WebP files are validated and stored in `backend/static/images/`, while their paths and metadata remain in the database.
 
 ## 📜 License
 This project is provided as-is for learning and fun. Feel free to adapt it to your needs.

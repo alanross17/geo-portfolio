@@ -75,7 +75,7 @@ export default function AdminPhotoForm({ mode, photo, onSubmit, onCancel, saving
       <Field label="Subtitle (optional)"><input className={inputClass} value={subtitle} onChange={(e) => setSubtitle(e.target.value)} /></Field>
     </div>
     <Field label="Instagram link (optional)"><input className={inputClass} type="url" placeholder="https://www.instagram.com/..." value={igLink} onChange={(e) => setIgLink(e.target.value)} /></Field>
-    {isCreate && <Field label="Image"><input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={chooseFile} /></Field>}
+    {isCreate && <Field label="Image"><input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseFile} /></Field>}
     {previewUrl && <img src={previewUrl} alt="Photo preview" className="max-h-64 w-full rounded-md object-contain bg-neutral-100" />}
     {!isCreate && photo && <AdminImage image={photo} variant="medium" alt={photo.title || "Photo preview"} loading="eager" className="aspect-video max-h-80 w-full rounded-md [&>picture>img]:object-contain" />}
     <div>
