@@ -420,55 +420,6 @@ def download_original(image_id):
     return send_file(path, as_attachment=True, download_name=image.original_filename)
 
 
-# Deprecated compatibility route: only database-known legacy names are served.
-@app.get("/images/<path:filename>")
-def serve_image(filename):
-    if filename != os.path.basename(filename):
-        abort(404)
-    with get_session() as db_session:
-        image = db_session.scalar(select(Image).where(or_(
-            Image.relative_url == f"images/{filename}", Image.relative_url == filename)))
-    if not image:
-        abort(404)
-    logger.info("Deprecated raw image URL requested for image %s", image.id)
-    legacy_path = os.path.join(IMAGES_PATH, filename)
-    if os.path.isfile(legacy_path):
-        return send_from_directory(IMAGES_PATH, filename)
-    if image.image_uid:
-        return serve_variant(image.image_uid, "large", "jpg")
-    abort(404)
-
-# This method is left over from session/game persistance, confirm it is no longer used!
-@app.post("/api/guess")
-def api_guess():
-    data = request.get_json(silent=True)
-    guess, error = parse_guess_payload(data)
-    image_id = data.get("image_id") if isinstance(data, dict) else None
-
-    if error or not image_id:
-        logger.warning("Invalid /api/guess payload: %s", error or "missing image_id")
-        return jsonify({"error": error or "image_id required"}), 400
-
-    with get_session() as session:
-        image = find_image(session, image_id)
-    if not image:
-        return jsonify({"error": "not found"}), 404
-
-    dist_m = haversine(guess["lat"], guess["lng"], image.lat, image.lng)
-    score = calc_score(dist_m)
-
-    payload = {
-        "distance_meters": round(dist_m, 2),
-        "score": score,
-        "solution": {
-            "lat": image.lat,
-            "lng": image.lng,
-            "title": image.title,
-            "subtitle": image.subtitle,
-        },
-    }
-    return jsonify(payload)
-
 @app.post("/api/session")
 def api_start_session():
     client_ip = get_client_ip()
