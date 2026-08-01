@@ -1,32 +1,79 @@
 """Shared public/admin image resource serialization."""
 import json
 
-from image_processing import VARIANT_MANIFEST
+from image_processing import VARIANT_MANIFEST, valid_generation, valid_image_id
+
+
+def _variants_from(value):
+    """Return manifest entries that are safe and complete enough to publish."""
+    try:
+        variants = json.loads(value or "[]") if isinstance(value, str) else value or []
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+    if not isinstance(variants, list):
+        return []
+
+    valid = []
+    for item in variants:
+        if not isinstance(item, dict):
+            continue
+        variant = item.get("variant")
+        image_format = item.get("format")
+        width = item.get("width")
+        height = item.get("height")
+        manifest_entry = VARIANT_MANIFEST.get(variant)
+        if (
+            not manifest_entry
+            or image_format not in manifest_entry["formats"]
+            or isinstance(width, bool)
+            or isinstance(height, bool)
+            or not isinstance(width, (int, float))
+            or not isinstance(height, (int, float))
+            or width <= 0
+            or height <= 0
+        ):
+            continue
+        valid.append(item)
+    return valid
+
+
+def _nullable_float(value):
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def build_image_resource(image, build_public_url, *, admin=False):
-    variants = json.loads(image.generated_variants or "[]")
+    """Serialize both legacy rows and rows with published image variants.
+
+    Migration is intentionally allowed to run after application deployment: a
+    missing or incomplete variant manifest merely makes ``relative_url`` the
+    public fallback rather than making the containing API response fail.
+    """
+    image_uid = getattr(image, "image_uid", None)
+    generation = getattr(image, "variant_generation", None)
+    can_publish_variants = valid_image_id(image_uid) and valid_generation(generation)
+    variants = _variants_from(getattr(image, "generated_variants", None))
     sources = {"webp": [], "jpeg": []}
     placeholder = None
 
-    if not image.image_uid:
-        raise ValueError("Image has no image_uid")
+    if can_publish_variants:
+        for item in variants:
+            image_format = item["format"]
+            ext = "jpg" if image_format == "jpeg" else image_format
+            url = build_public_url(
+                f"images/{image_uid}/{generation}/{item['variant']}.{ext}"
+            )
+            if item["variant"] == "placeholder":
+                placeholder = url
+            elif image_format in sources:
+                sources[image_format].append({
+                    "variant": item["variant"], "width": item["width"],
+                    "height": item["height"], "url": url,
+                })
 
-    if not image.variant_generation:
-        raise ValueError(
-            f"Image {image.image_uid} has no published variant generation"
-        )
-
-    for item in variants:
-        ext = "jpg" if item["format"] == "jpeg" else item["format"]
-        url = build_public_url(f"images/{image.image_uid}/{image.variant_generation}/{item['variant']}.{ext}")
-        if item["variant"] == "placeholder":
-            placeholder = url
-        elif item["format"] in sources:
-            sources[item["format"]].append({
-                "variant": item["variant"], "width": item["width"],
-                "height": item["height"], "url": url,
-            })
     order = {name: index for index, name in enumerate(VARIANT_MANIFEST)}
     for fmt, items in sources.items():
         items.sort(key=lambda item: order[item["variant"]])
@@ -37,23 +84,29 @@ def build_image_resource(image, build_public_url, *, admin=False):
     fallback = next((item for item in jpegs if item["variant"] == "large"), None)
     if fallback is None and jpegs:
         fallback = max(jpegs, key=lambda item: max(item["width"], item["height"]))
-    fallback_url = fallback["url"] if fallback else build_public_url(image.relative_url)
+    fallback_url = fallback["url"] if fallback else build_public_url(
+        getattr(image, "relative_url", "") or ""
+    )
     resource = {
-        "id": image.image_uid or image.id,
-        "title": image.title, "subtitle": image.subtitle, "igLink": image.ig_link,
-        "width": image.width, "height": image.height,
-        "aspectRatio": float(image.aspect_ratio) if image.aspect_ratio is not None else None,
+        "id": image_uid or getattr(image, "id", None),
+        "title": getattr(image, "title", None),
+        "subtitle": getattr(image, "subtitle", None),
+        "igLink": getattr(image, "ig_link", None),
+        "width": getattr(image, "width", None),
+        "height": getattr(image, "height", None),
+        "aspectRatio": _nullable_float(getattr(image, "aspect_ratio", None)),
         "placeholder": placeholder, "sources": sources, "fallbackUrl": fallback_url,
         # Transitional alias: remove only after PhotoCard and admin consumers migrate.
         "url": fallback_url,
     }
     if admin:
-        resource.update({"lat": image.lat, "lng": image.lng,
-            "originalFilename": image.original_filename,
-            "originalFormat": image.original_format,
-            "originalDownloadUrl": (build_public_url(f"api/admin/images/{image.image_uid}/original")
-                                    if image.image_uid else None),
-            "processingStatus": image.processing_status,
-            "processingVersion": image.processing_version,
-            "variantGeneration": image.variant_generation,})
+        resource.update({"lat": getattr(image, "lat", None),
+            "lng": getattr(image, "lng", None),
+            "originalFilename": getattr(image, "original_filename", None),
+            "originalFormat": getattr(image, "original_format", None),
+            "originalDownloadUrl": (build_public_url(f"api/admin/images/{image_uid}/original")
+                                    if valid_image_id(image_uid) else None),
+            "processingStatus": getattr(image, "processing_status", None),
+            "processingVersion": getattr(image, "processing_version", None),
+            "variantGeneration": generation,})
     return resource

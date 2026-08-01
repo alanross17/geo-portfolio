@@ -97,6 +97,48 @@ def test_serializer_fallback_alias_and_omission(tmp_path):
     assert not any(v["variant"] == "xlarge" for v in resource["sources"]["jpeg"])
 
 
+def test_serializer_supports_legacy_rows_without_migration_columns():
+    class LegacyRecord:
+        id = "legacy-database-id"
+        relative_url = "images/legacy.jpg"
+        title = "Legacy"
+        subtitle = ig_link = None
+
+    resource = build_image_resource(LegacyRecord(), lambda value: "/" + value)
+
+    assert resource == {
+        "id": "legacy-database-id",
+        "title": "Legacy",
+        "subtitle": None,
+        "igLink": None,
+        "width": None,
+        "height": None,
+        "aspectRatio": None,
+        "placeholder": None,
+        "sources": {"webp": [], "jpeg": []},
+        "fallbackUrl": "/images/legacy.jpg",
+        "url": "/images/legacy.jpg",
+    }
+
+
+def test_serializer_ignores_invalid_partial_manifest_and_uses_legacy_fallback():
+    class PartialRecord:
+        id = "database-id"
+        image_uid = "a" * 32
+        variant_generation = "b" * 32
+        generated_variants = '[{"variant":"large","format":"jpeg"}, "bad"]'
+        relative_url = "images/still-live.jpg"
+        title = subtitle = ig_link = None
+        width = height = aspect_ratio = None
+
+    resource = build_image_resource(PartialRecord(), lambda value: "/" + value)
+
+    assert resource["id"] == "a" * 32
+    assert resource["fallbackUrl"] == "/images/still-live.jpg"
+    assert resource["sources"] == {"webp": [], "jpeg": []}
+    assert resource["placeholder"] is None
+
+
 def test_reprocessing_publishes_distinct_immutable_generation_urls(tmp_path):
     image_id = "1" * 32
     first = process_image(encoded((640, 320)), tmp_path, image_id, "first.jpg")
