@@ -22,6 +22,17 @@ test("ignores malformed entries and empty source collections", () => {
   assert.equal(buildSrcSet(undefined), "")
 })
 
+test("deduplicates width descriptors and lets the last candidate win", () => {
+  const sources = [
+    { url: "/thumb.jpg", width: 200, variant: "thumb" },
+    { url: "/small.jpg", width: 200, variant: "small" },
+    { url: "/medium.jpg", width: 640, variant: "medium" },
+  ]
+
+  assert.deepEqual(validSources(sources), [sources[1], sources[2]])
+  assert.equal(buildSrcSet(sources), "/small.jpg 200w, /medium.jpg 640w")
+})
+
 test("prefers fallbackUrl, then the legacy URL", () => {
   assert.equal(getFallbackUrl({ fallbackUrl: "/fallback.jpg", url: "/legacy.jpg" }), "/fallback.jpg")
   assert.equal(getFallbackUrl({ url: "/legacy.jpg" }), "/legacy.jpg")

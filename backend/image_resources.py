@@ -28,8 +28,11 @@ def build_image_resource(image, build_public_url, *, admin=False):
                 "height": item["height"], "url": url,
             })
     order = {name: index for index, name in enumerate(VARIANT_MANIFEST)}
-    for items in sources.values():
+    for fmt, items in sources.items():
         items.sort(key=lambda item: order[item["variant"]])
+        # Older manifests may contain several canonical names for the same
+        # no-upscale dimensions. Prefer the later (larger) canonical variant.
+        sources[fmt] = list({item["width"]: item for item in items}.values())
     jpegs = sources["jpeg"]
     fallback = next((item for item in jpegs if item["variant"] == "large"), None)
     if fallback is None and jpegs:

@@ -216,8 +216,11 @@ def process_image(source, storage_root: str | Path, image_id: str, original_file
         width, height = oriented.size
         generated: list[GeneratedVariant] = []
         long_edge = max(width, height)
+        full_size_variant_generated = False
         for name, spec in VARIANT_MANIFEST.items():
             if long_edge < spec.get("minimum_source_edge", 0):
+                continue
+            if name != "placeholder" and full_size_variant_generated:
                 continue
             resized = oriented.copy()
             resized.thumbnail((spec["long_edge"], spec["long_edge"]), Image.Resampling.LANCZOS)
@@ -231,6 +234,11 @@ def process_image(source, storage_root: str | Path, image_id: str, original_file
                 public.save(destination, format="JPEG" if fmt == "jpeg" else "WEBP", **options)
                 generated.append(GeneratedVariant(name, fmt, public.width, public.height,
                     f"variants/{image_id}/{generation}/{name}.{ext}"))
+            # The first regular target at or above the source edge is the
+            # full-size fallback. Later targets would only re-encode the same
+            # pixels under different variant names.
+            if name != "placeholder" and spec["long_edge"] >= long_edge:
+                full_size_variant_generated = True
 
         final_original_dir = root / "originals" / image_id
         final_generation_dir = (

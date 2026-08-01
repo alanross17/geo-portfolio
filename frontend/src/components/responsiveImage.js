@@ -29,9 +29,15 @@ const isValidSource = (source) =>
   )
 
 export const validSources = (sources) =>
-  (Array.isArray(sources) ? sources : [])
-    .filter(isValidSource)
-    .sort((a, b) => a.width - b.width)
+  [
+    // Manifests are ordered from smallest to largest canonical variant. If an
+    // old or malformed manifest repeats a width, the last candidate wins.
+    ...new Map(
+      (Array.isArray(sources) ? sources : [])
+        .filter(isValidSource)
+        .map((source) => [source.width, source])
+    ).values(),
+  ].sort((a, b) => a.width - b.width)
 
 export const buildSrcSet = (sources) =>
   validSources(sources)

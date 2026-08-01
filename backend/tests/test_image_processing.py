@@ -20,8 +20,9 @@ def test_landscape_original_storage_and_no_upscale(tmp_path):
     result = process_image(source, tmp_path, "a" * 32, "holiday.jpg")
     assert (result.width, result.height, result.aspect_ratio) == (800, 400, 2)
     assert (tmp_path / result.original_location).read_bytes() == original
-    assert variant_path(tmp_path, "a" * 32, result.generation, "large", "jpeg").is_file()
-    assert {max(v.width, v.height) for v in result.variants if v.variant == "large"} == {800}
+    assert variant_path(tmp_path, "a" * 32, result.generation, "medium", "jpeg").is_file()
+    assert {max(v.width, v.height) for v in result.variants if v.variant == "medium"} == {800}
+    assert not variant_path(tmp_path, "a" * 32, result.generation, "large", "jpeg").exists()
     assert not any(v.variant == "xlarge" for v in result.variants)
 
 
@@ -29,6 +30,35 @@ def test_portrait_and_conditional_xlarge(tmp_path):
     result = process_image(encoded((1000, 2000)), tmp_path, "b" * 32, "p.jpg")
     assert (result.width, result.height) == (1000, 2000)
     assert "xlarge" in {v.variant for v in result.variants}
+
+
+@pytest.mark.parametrize(
+    ("long_edge", "expected_variants"),
+    [
+        (200, ["thumb"]),
+        (500, ["thumb", "small"]),
+        (1000, ["thumb", "small", "medium"]),
+        (1500, ["thumb", "small", "medium", "large"]),
+    ],
+)
+def test_regular_variants_stop_after_the_full_size_fallback(
+    tmp_path, long_edge, expected_variants
+):
+    result = process_image(
+        encoded((long_edge, long_edge // 2)),
+        tmp_path,
+        f"{long_edge:032x}",
+        "responsive.jpg",
+    )
+
+    for fmt in ("jpeg", "webp"):
+        variants = [
+            v for v in result.variants
+            if v.format == fmt and v.variant != "placeholder"
+        ]
+        assert [v.variant for v in variants] == expected_variants
+        assert len({v.width for v in variants}) == len(variants)
+        assert variants[-1].width == long_edge
 
 
 def test_exif_orientation_is_applied(tmp_path):
@@ -62,7 +92,7 @@ def test_serializer_fallback_alias_and_omission(tmp_path):
         variant_generation = result.generation
     resource = build_image_resource(Record(), lambda value: "/" + value)
     assert resource["url"] == resource["fallbackUrl"]
-    assert resource["fallbackUrl"].endswith(f"/{result.generation}/large.jpg")
+    assert resource["fallbackUrl"].endswith("/small.jpg")
     assert resource["placeholder"].endswith(f"/{result.generation}/placeholder.jpg")
     assert not any(v["variant"] == "xlarge" for v in resource["sources"]["jpeg"])
 
@@ -103,3 +133,22 @@ def test_reprocessing_publishes_distinct_immutable_generation_urls(tmp_path):
     assert first_path.is_file()
     assert second_path.is_file()
     assert first_path.parent != second_path.parent
+
+
+def test_serializer_deduplicates_legacy_variant_widths():
+    class Record:
+        image_uid = id = "1" * 32
+        title = subtitle = ig_link = None
+        width, height, aspect_ratio = 200, 100, 2
+        variant_generation = "2" * 32
+        relative_url = "images/legacy.jpg"
+        generated_variants = """[
+          {"variant":"thumb","format":"jpeg","width":200,"height":100},
+          {"variant":"small","format":"jpeg","width":200,"height":100},
+          {"variant":"large","format":"jpeg","width":200,"height":100}
+        ]"""
+
+    resource = build_image_resource(Record(), lambda value: "/" + value)
+
+    assert [item["variant"] for item in resource["sources"]["jpeg"]] == ["large"]
+    assert resource["fallbackUrl"].endswith("/large.jpg")
