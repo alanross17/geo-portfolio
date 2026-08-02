@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet"
 import "leaflet/dist/leaflet.css"
 import { guessIcon, solutionIcon } from "./mapIcons"
+import AdminImage from "./AdminImage.jsx"
 
 function LocationPicker({ editable, location, onLocationChange }) {
   useMapEvents({
@@ -18,7 +19,7 @@ function Field({ label, children }) {
 
 const inputClass = "w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-neutral-700"
 
-export default function AdminPhotoForm({ mode, photo, onSubmit, saving }) {
+export default function AdminPhotoForm({ mode, photo, onSubmit, onCancel, saving }) {
   const isCreate = mode === "create"
   const [title, setTitle] = useState("")
   const [subtitle, setSubtitle] = useState("")
@@ -34,7 +35,7 @@ export default function AdminPhotoForm({ mode, photo, onSubmit, saving }) {
     setIgLink(photo?.igLink || "")
     setLocation(photo ? { lat: photo.lat, lng: photo.lng } : null)
     setFile(null)
-    setPreviewUrl(photo?.url || "")
+    setPreviewUrl("")
     setError("")
   }, [photo, mode])
 
@@ -74,8 +75,9 @@ export default function AdminPhotoForm({ mode, photo, onSubmit, saving }) {
       <Field label="Subtitle (optional)"><input className={inputClass} value={subtitle} onChange={(e) => setSubtitle(e.target.value)} /></Field>
     </div>
     <Field label="Instagram link (optional)"><input className={inputClass} type="url" placeholder="https://www.instagram.com/..." value={igLink} onChange={(e) => setIgLink(e.target.value)} /></Field>
-    {isCreate && <Field label="Image"><input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/gif,image/webp" onChange={chooseFile} /></Field>}
+    {isCreate && <Field label="Image"><input className="block w-full text-sm" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseFile} /></Field>}
     {previewUrl && <img src={previewUrl} alt="Photo preview" className="max-h-64 w-full rounded-md object-contain bg-neutral-100" />}
+    {!isCreate && photo && <AdminImage image={photo} variant="medium" alt={photo.title || "Photo preview"} loading="eager" className="aspect-video max-h-80 w-full rounded-md [&>picture>img]:object-contain" />}
     <div>
       <p className="mb-1 text-sm font-medium text-neutral-700">Location {isCreate ? "(required)" : ""}</p>
       <div className="h-64 overflow-hidden rounded-md border border-neutral-300">
@@ -87,6 +89,9 @@ export default function AdminPhotoForm({ mode, photo, onSubmit, saving }) {
       <p className="mt-1 text-xs text-neutral-500">{location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : "Click the map to select the photo location."}{!isCreate && " Location is read-only."}</p>
     </div>
     {error && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-    <button disabled={saving} className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-semibold text-white disabled:bg-neutral-400">{saving ? "Saving…" : isCreate ? "Add photo" : "Save changes"}</button>
+    <div className="sticky bottom-0 flex justify-end gap-3 border-t bg-white pt-4">
+      <button type="button" disabled={saving} onClick={onCancel} className="rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-neutral-900 disabled:opacity-40">Cancel</button>
+      <button disabled={saving} className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 disabled:bg-neutral-400">{saving ? "Saving…" : isCreate ? "Add photo" : "Save changes"}</button>
+    </div>
   </form>
 }

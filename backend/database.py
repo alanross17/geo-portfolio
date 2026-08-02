@@ -2,7 +2,7 @@ import json
 import os
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base, GameSession, GuessLog, Image, LeaderboardEntry
@@ -37,6 +37,49 @@ def get_session() -> Session:
 def init_db(seed_file: str | None = None) -> None:
     """Create tables and optionally seed from a JSON file when empty."""
     Base.metadata.create_all(bind=engine)
+
+    # This project historically used create_all without Alembic. create_all()
+    # creates missing tables but does not modify existing ones, so reconcile
+    # the small set of schema additions expected by the current application.
+    inspector = inspect(engine)
+
+    existing_columns = {
+        column["name"]
+        for column in inspector.get_columns("images")
+    }
+    existing_indexes = {
+        index["name"]
+        for index in inspector.get_indexes("images")
+    }
+
+    additions = {
+        "image_uid": "VARCHAR(32)",
+        "original_filename": "VARCHAR(255)",
+        "original_format": "VARCHAR(16)",
+        "original_location": "VARCHAR(255)",
+        "width": "INTEGER",
+        "height": "INTEGER",
+        "aspect_ratio": "NUMERIC(16,8)",
+        "generated_variants": "TEXT",
+        "processing_status": "VARCHAR(32)",
+        "processing_version": "INTEGER",
+        "variant_generation": "VARCHAR(32)",
+    }
+
+    with engine.begin() as connection:
+        for name, sql_type in additions.items():
+            if name not in existing_columns:
+                connection.execute(
+                    text(f"ALTER TABLE images ADD COLUMN {name} {sql_type}")
+                )
+
+        if "ix_images_image_uid" not in existing_indexes:
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX ix_images_image_uid "
+                    "ON images(image_uid)"
+                )
+            )
 
     if not seed_file or not os.path.exists(seed_file):
         return

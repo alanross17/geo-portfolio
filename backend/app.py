@@ -6,17 +6,22 @@ import os
 from datetime import datetime, timedelta
 from math import radians, sin, cos, asin, sqrt, exp
 from typing import List
-from flask import Flask, jsonify, request, send_from_directory, session
+from flask import Flask, abort, jsonify, request, send_file, send_from_directory, session
 from flask_cors import CORS # type: ignore
-from sqlalchemy import delete, exists, select
+from sqlalchemy import delete, exists, or_, select
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from database import Image, get_session, init_db
 from models import GameSession, LeaderboardEntry, GuessLog
 from admin import (
     ValidationError, admin_configured, metadata_from_payload, parse_coordinates,
-    remove_stored_image, require_admin, save_uploaded_image, serialize_admin_image,
-    verify_password,
+    require_admin, verify_password,
 )
+from image_processing import (FORMAT_EXTENSIONS, PROCESSING_VERSION,
+    VARIANT_MANIFEST, ImageProcessingError, process_image, remove_image_files,
+    valid_image_id, variant_path)
+from image_resources import build_image_resource
+from image_migration import register_image_migration
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -26,12 +31,14 @@ logger = logging.getLogger(__name__)
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGES_PATH = os.path.join(BASE_DIR, "media", "images")
+IMAGES_PATH = os.environ.get("IMAGE_STORAGE_ROOT", os.path.join(BASE_DIR, "media", "images"))
 FRONTEND_BUILD = os.path.join(BASE_DIR, "static", "app")
 FRONTEND_ASSETS = os.path.join(FRONTEND_BUILD, "assets")
 
 UNUSED_SESSION_MAX_AGE_MINUTES = int(os.environ.get("UNUSED_SESSION_MAX_AGE_MINUTES", "60"))
 DB_PURGE_RUN_CHANCE = 0.05 # ~5% chance
+
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MiB
 
 
 # Frontend files have explicit routes below. A Flask static catch-all mounted at
@@ -44,7 +51,10 @@ app.config.update(
     ADMIN_PASSWORD_HASH=os.environ.get("ADMIN_PASSWORD_HASH"),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
-    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "true").lower() == "true",
+    SESSION_COOKIE_SECURE=os.environ.get(
+        "SESSION_COOKIE_SECURE", "true"
+    ).lower() == "true",
+    MAX_CONTENT_LENGTH=MAX_UPLOAD_SIZE,
 )
 
 allowed_origins = [
@@ -61,6 +71,7 @@ else:
 init_db(os.path.join(BASE_DIR, "images.json"))
 
 BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
+register_image_migration(app, IMAGES_PATH)
 
 ROUND_LIMIT = 5
 BONUS_RADIUS_METERS = 25_000
@@ -98,13 +109,10 @@ def get_client_geo_from_cf() -> dict:
     }
 
 def serialize_image(image: Image) -> dict:
-    return {
-        "id": image.id,
-        "title": image.title,
-        "subtitle": image.subtitle,
-        "igLink": image.ig_link,
-        "url": build_public_url(image.relative_url),
-    }
+    return build_image_resource(image, build_public_url)
+
+def find_image(db_session, image_id):
+    return db_session.scalar(select(Image).where(or_(Image.id == image_id, Image.image_uid == image_id)))
 
 def parse_guess_payload(data):
     if not isinstance(data, dict):
@@ -227,6 +235,14 @@ def purge_unused_sessions(session) -> int:
     return deleted_rows
 
 
+# Error handler code
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_too_large(exc):
+    return jsonify({
+        "error": "Image upload is too large. The maximum size is 50 MB."
+    }), 413
+
+
 # All API Stuff
 @app.get("/api/admin/auth/status")
 def admin_auth_status():
@@ -257,7 +273,7 @@ def admin_logout():
 def admin_images():
     with get_session() as db_session:
         images = db_session.scalars(select(Image).order_by(Image.id)).all()
-        payload = [serialize_admin_image(image, build_public_url) for image in images]
+        payload = [build_image_resource(image, build_public_url, admin=True) for image in images]
     return jsonify(payload)
 
 
@@ -267,21 +283,37 @@ def admin_create_image():
     try:
         metadata = metadata_from_payload(request.form)
         lat, lng = parse_coordinates(request.form.get("lat"), request.form.get("lng"))
-        stored_filename = save_uploaded_image(request.files.get("image"), IMAGES_PATH)
+        upload = request.files.get("image")
+        if not upload or not upload.filename:
+            raise ValidationError("An image file is required")
+        image_uid = uuid.uuid4().hex
+        result = process_image(upload.stream, IMAGES_PATH, image_uid, upload.filename)
+    except ImageProcessingError as exc:
+        return jsonify({"error": str(exc)}), 400
     except ValidationError as exc:
         return jsonify({"error": str(exc)}), 400
 
     image = Image(
-        id=uuid.uuid4().hex,
-        relative_url=f"images/{stored_filename}", lat=lat, lng=lng, **metadata,
+        id=image_uid, image_uid=image_uid, 
+        relative_url=f"images/{image_uid}/{result.generation}/large.jpg", 
+        variant_generation = result.generation,
+        original_filename=result.original_filename, 
+        original_format=result.original_format,
+        original_location=result.original_location, 
+        width=result.width, height=result.height,
+        aspect_ratio=result.aspect_ratio, 
+        generated_variants=result.variants_json(),
+        processing_status="ready", 
+        processing_version=PROCESSING_VERSION,
+        lat=lat, lng=lng, **metadata,
     )
     try:
         with get_session() as db_session:
             db_session.add(image)
             db_session.flush()
-            payload = serialize_admin_image(image, build_public_url)
+            payload = build_image_resource(image, build_public_url, admin=True)
     except Exception:
-        remove_stored_image(IMAGES_PATH, stored_filename)
+        remove_image_files(IMAGES_PATH, image_uid)
         logger.exception("Admin image creation failed")
         return jsonify({"error": "Unable to create photo"}), 500
     return jsonify(payload), 201
@@ -302,13 +334,13 @@ def admin_update_image(image_id):
     except ValidationError as exc:
         return jsonify({"error": str(exc)}), 400
     with get_session() as db_session:
-        image = db_session.get(Image, image_id)
+        image = find_image(db_session, image_id)
         if not image:
             return jsonify({"error": "Photo not found"}), 404
         for field, value in metadata.items():
             setattr(image, field, value)
         db_session.flush()
-        payload = serialize_admin_image(image, build_public_url)
+        payload = build_image_resource(image, build_public_url, admin=True)
     return jsonify(payload)
 
 
@@ -323,46 +355,70 @@ def api_images():
 @app.get("/api/image/<image_id>")
 def api_image(image_id):
     with get_session() as session:
-        image = session.get(Image, image_id)
+        image = find_image(session, image_id)
     if not image:
         return jsonify({"error": "not found"}), 404
     safe = serialize_image(image)
     return jsonify(safe)
 
-# Serve images
-@app.get("/images/<path:filename>")
-def serve_image(filename):
-    return send_from_directory(IMAGES_PATH, filename)
 
-@app.post("/api/guess")
-def api_guess():
-    data = request.get_json(silent=True)
-    guess, error = parse_guess_payload(data)
-    image_id = data.get("image_id") if isinstance(data, dict) else None
+# Immutable public derivatives. Flask converters plus allowlists ensure route
+# components can never become arbitrary filesystem paths.
+@app.get("/images/<image_id>/<generation>/<variant>.<fmt>")
+def serve_variant(image_id, generation, variant, fmt):
 
-    if error or not image_id:
-        logger.warning("Invalid /api/guess payload: %s", error or "missing image_id")
-        return jsonify({"error": error or "image_id required"}), 400
+    logical_format = "jpeg" if fmt == "jpg" else fmt
 
-    with get_session() as session:
-        image = session.get(Image, image_id)
+    if (not valid_image_id(image_id) or 
+        variant not in VARIANT_MANIFEST or
+        variant == "original" or 
+        logical_format not in FORMAT_EXTENSIONS or
+        logical_format not in VARIANT_MANIFEST[variant]["formats"]
+    ):
+        abort(404)
+
+    with get_session() as db_session:
+        image = db_session.scalar(
+            select(Image).where(Image.image_uid == image_id)
+        )
+
     if not image:
-        return jsonify({"error": "not found"}), 404
+        abort(404)
 
-    dist_m = haversine(guess["lat"], guess["lng"], image.lat, image.lng)
-    score = calc_score(dist_m)
+    try:
+        path = variant_path(
+            IMAGES_PATH, 
+            image_id, 
+            generation, 
+            variant, 
+            logical_format
+        )
+    except ValueError:
+        abort(404)
 
-    payload = {
-        "distance_meters": round(dist_m, 2),
-        "score": score,
-        "solution": {
-            "lat": image.lat,
-            "lng": image.lng,
-            "title": image.title,
-            "subtitle": image.subtitle,
-        },
-    }
-    return jsonify(payload)
+    if not path.is_file():
+        abort(404)
+
+    response = send_file(path, mimetype="image/jpeg" if logical_format == "jpeg" else "image/webp")
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+# Returns orignal image for a given ID, admin purposes only!
+@app.get("/api/admin/images/<image_id>/original")
+@require_admin
+def download_original(image_id):
+    if not valid_image_id(image_id):
+        abort(404)
+    with get_session() as db_session:
+        image = db_session.scalar(select(Image).where(Image.image_uid == image_id))
+    if not image or not image.original_location:
+        abort(404)
+    path = os.path.join(IMAGES_PATH, *image.original_location.split("/"))
+    if not os.path.isfile(path):
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=image.original_filename)
+
 
 @app.post("/api/session")
 def api_start_session():

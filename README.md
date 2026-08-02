@@ -65,17 +65,66 @@ This launches both the API (on port 8080) and the frontend (on port 5173). Set t
 - `GET /api/session/<session_id>/summary` – fetch the full summary for a session (totals and all rounds)
 - `GET /api/leaderboard` – retrieve the top leaderboard entries
 - `POST /api/leaderboard` – submit a finished session score to the leaderboard
-- Images are served from `/images/<filename>`
+- Responsive images are served from `/images/<image-id>/<generation>/<variant>.<jpg|webp>`
 
 ## 🖼️ Adding Your Own Photos
-1. Drop images into `backend/static/images/`
+1. Drop images into `data/images/`
 2. Insert a new row into the `images` table with fields: `id`, `relative_url` (e.g. `images/my-photo.jpg`), `lat`, `lng`, and optional `title`/`subtitle`
 3. Restart the backend and enjoy! 🌟
+
+> New installations should use the admin upload rather than inserting files
+> directly. The manual steps above describe only the legacy catalog format.
+
+## Responsive image storage and rollout
+
+Admin uploads are stored beneath `IMAGE_STORAGE_ROOT`, which defaults to
+`backend/media/images` when the backend is run from the repository. Untouched
+source bytes live below `originals/<image-id>/` (currently as
+`original.<source-extension>`). Generated public files live in versioned
+generation directories at
+`variants/<image-id>/<generation>/<variant>.<format>`, and are served at
+`/images/<image-id>/<generation>/<variant>.<jpg|webp>`. Random UUID-hex image IDs
+prevent filename collisions, while the generation component allows a newly
+processed set of variants to be published without changing or colliding with a
+previous set.
+
+The development Compose configuration bind-mounts the host directory
+`./data/images` at `/app/media/images`, the backend container's default
+`IMAGE_STORAGE_ROOT`. The production Compose configuration instead mounts the
+same host directory at `/app/backend/media/images`, which is the default path in
+the unified production image. Set `IMAGE_STORAGE_ROOT` explicitly if a custom
+container path is used, and mount persistent storage at that same path so both
+originals and generated variants survive container replacement.
+
+The manifest in `backend/image_processing.py` defines placeholder (40), thumb
+(320), small (640), medium (1280), large (1920), and xlarge (2560) long edges.
+Images are EXIF-oriented and never enlarged; xlarge is only made above 1920 px.
+JPEG is progressive at quality 86, WebP uses quality 84/method 6, and the JPEG
+placeholder uses quality 35. Public files omit EXIF/GPS/ICC metadata and JPEG
+alpha is composited on white; the original remains byte-for-byte unchanged.
+
+Resources expose `id`, dimensions, numeric `aspectRatio`, `placeholder`, grouped
+`sources`, and `fallbackUrl`. Transitional `url` aliases the large (or largest)
+JPEG. Admin responses add original filename/format, status/version, and an
+authenticated `/api/admin/images/<image-id>/original` URL, but never paths.
+
+```bash
+flask --app app migrate-images --dry-run
+flask --app app migrate-images
+flask --app app migrate-images --regenerate
+```
+
+Migration is per-record, restartable, preserves stable IDs and legacy files,
+continues after failures, and returns non-zero for any failure. Roll back with a
+database backup and retained legacy files. Increment `PROCESSING_VERSION` and run
+`--regenerate` after future manifest changes. The database-guarded raw-image
+route, `/images/<filename>`, is a temporary legacy compatibility route and logs
+use; clients should use the versioned responsive-image URL instead.
 
 To seed via JSON for quick demos, you can still place entries in `backend/images.json`; they are only imported automatically when the database is empty.
 
 ### Admin settings
-The unlinked `/admin` route lets an administrator add photos and edit titles, subtitles, and Instagram links. It is only enabled when both `FLASK_SECRET_KEY` and `ADMIN_PASSWORD_HASH` are configured. The backend uses an HttpOnly, SameSite signed session cookie; set `SESSION_COOKIE_SECURE=false` only for local HTTP development. Uploaded JPEG, PNG, GIF, and WebP files are validated and stored in `backend/static/images/`, while their paths and metadata remain in the database.
+The unlinked `/admin` route lets an administrator add photos and edit titles, subtitles, and Instagram links. It is only enabled when both `FLASK_SECRET_KEY` and `ADMIN_PASSWORD_HASH` are configured. The backend uses an HttpOnly, SameSite signed session cookie; set `SESSION_COOKIE_SECURE=false` only for local HTTP development. Uploaded JPEG, PNG, and WebP files are validated and stored beneath `IMAGE_STORAGE_ROOT` (default `backend/media/images`) using the original and versioned-variant layout described above, while their storage locations and metadata remain in the database.
 
 ## 📜 License
 This project is provided as-is for learning and fun. Feel free to adapt it to your needs.
