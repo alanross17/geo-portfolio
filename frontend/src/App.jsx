@@ -39,7 +39,10 @@ export default function App() {
   }
 
   const bootstrap = async () => {
-    const payload = await startSession()
+
+    const viewportAspectRatio = window.innerWidth / window.innerHeight
+    const payload = await startSession(viewportAspectRatio)
+    
     hydrateSession(payload)
     setRounds([])
     setResult(null)

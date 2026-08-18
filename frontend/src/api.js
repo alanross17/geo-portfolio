@@ -1,7 +1,10 @@
 import axios from "axios"
 
-export async function startSession() {
-  const { data } = await axios.post("/api/session")
+export async function startSession(viewportAspectRatio) {
+  const { data } = await axios.post("/api/session", {
+    viewport_aspect_ratio: viewportAspectRatio,
+  })
+
   return data
 }
 
