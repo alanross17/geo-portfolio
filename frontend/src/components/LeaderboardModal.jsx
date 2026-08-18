@@ -3,8 +3,8 @@ export default function LeaderboardModal({ open, onClose, leaderboard, placement
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-40">
-      <div className="bg-white rounded-2xl shadow-2xl w-[min(620px,92vw)] max-h-[80vh] overflow-hidden text-neutral-900">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-[min(620px,92vw)] max-h-[80vh] overflow-hidden text-neutral-900 flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
           <div>
             <div className="text-xs uppercase tracking-wide text-gray-500">Live public leaderboard</div>
             <div className="text-lg font-semibold">You are projected #{placement}</div>
@@ -14,7 +14,7 @@ export default function LeaderboardModal({ open, onClose, leaderboard, placement
             ✕
           </button>
         </div>
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto min-h-0">
           <ol className="space-y-2">
             {leaderboard.map((entry, idx) => (
               <li
