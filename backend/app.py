@@ -158,13 +158,70 @@ def calc_score(dist_m) -> int:
 
     return round(SCORE_MAX * exp(-dist_m / LAMBDA))
 
-def choose_image_order(session) -> List[str]:
-    images = session.scalars(select(Image)).all()
+
+def classify_orientation(aspect_ratio: float) -> str:
+    # classifies what is considered portrait or landscape
+    # exact aspect ratio is slightly over shot in both directions in case of rounding errors
+    # considers square images as both orientations
+    if aspect_ratio > 1.05:
+        return "landscape"
+
+    if aspect_ratio < 0.95:
+        return "portrait"
+
+    return "square"
+
+def choose_image_order(session, viewport_aspect_ratio: float) -> List[str]:
+    """Choose images matching the viewport orientation where possible."""
+    # there's some obvious flaws here, but this is just simple start to better adapt images to screens
+    # - with a certain aspect ratio there are still large variations that may lead to cropping (i.e. 5:4 vs 2:1)
+    # - image list is set on session creation, therefore if users window size changes, the matching breaks.
+
+    # get all images where aspect ratio has been calculated
+    images = session.scalars(
+        select(Image).where(Image.aspect_ratio.is_not(None))
+    ).all()
+
     if not images:
         raise ValueError("No images available")
-    ids = [img.id for img in images]
-    random.shuffle(ids)
-    return ids[: ROUND_LIMIT + 2]
+
+    # classify orientation of aspect ratio passed from user via API
+    viewport_orientation = (
+        "landscape"
+        if viewport_aspect_ratio > 1
+        else "portrait"
+    )
+
+    matching_images = []
+    fallback_images = []
+
+    # loop db image list
+    for image in images:
+        # detrmine orientation class
+        image_orientation = classify_orientation(
+            float(image.aspect_ratio)
+        )
+
+        # sort by whether they fit the users orientation
+        if image_orientation in (viewport_orientation, "square"):
+            matching_images.append(image.id)
+        else:
+            fallback_images.append(image.id)
+
+    # shuffle the lists
+    random.shuffle(matching_images)
+    random.shuffle(fallback_images)
+
+    desired_count = ROUND_LIMIT + 2
+
+    # this should be cleaned up to avoid even processing the fallback images if enough matches exist.
+    # Matching images are always used first. Other orientations only fill gaps.
+    image_ids = matching_images + fallback_images
+
+    if not image_ids:
+        raise ValueError("No usable images available")
+
+    return image_ids[:desired_count]
 
 
 def serialize_session(game_session: GameSession, images_lookup: dict) -> dict:
@@ -425,10 +482,31 @@ def api_start_session():
     client_ip = get_client_ip()
     client_geo = get_client_geo_from_cf()
 
+    request_data = request.get_json(silent=True) or {}
+    viewport_aspect_ratio = request_data.get("viewport_aspect_ratio")
+
+    try:
+        viewport_aspect_ratio = float(viewport_aspect_ratio)
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "viewport_aspect_ratio must be a number"
+        }), 400
+
+    if viewport_aspect_ratio <= 0:
+        return jsonify({
+            "error": "viewport_aspect_ratio must be greater than zero"
+        }), 400
+
     with get_session() as session:
         maybe_purge_unused_sessions(session)
-        order = choose_image_order(session)
+
+        order = choose_image_order(
+            session,
+            viewport_aspect_ratio=viewport_aspect_ratio,
+        )
+        
         order_str = ",".join(order)
+
         game_session = GameSession(
             id=uuid.uuid4().hex,
             image_order=order_str,
@@ -440,10 +518,19 @@ def api_start_session():
             lat=client_geo.get("lat"),
             lon=client_geo.get("lon"),
         )
+
         session.add(game_session)
         session.flush()
-        images_lookup = {img.id: img for img in session.scalars(select(Image)).all()}
+
+        images_lookup = {
+            image.id: image
+            for image in session.scalars(
+                select(Image).where(Image.id.in_(order))
+            ).all()
+        }
+
         payload = serialize_session(game_session, images_lookup)
+
     return jsonify(payload)
 
 @app.post("/api/session/<session_id>/guess")
