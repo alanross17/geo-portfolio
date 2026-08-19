@@ -3,6 +3,7 @@ import os
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base, GameSession, GuessLog, Image, LeaderboardEntry
@@ -12,6 +13,12 @@ DEFAULT_SQLITE_PATH = os.path.join(BASE_DIR, "images.db")
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if DATABASE_URL:
+    database_url = make_url(DATABASE_URL)
+    # MySQL's historical ``utf8`` character set only stores three-byte
+    # characters. Emoji require utf8mb4 on both the connection and columns.
+    if database_url.get_backend_name() == "mysql":
+        database_url = database_url.update_query_dict({"charset": "utf8mb4"})
+    DATABASE_URL = database_url
     engine_kwargs = {}
 else:
     DATABASE_URL = f"sqlite:///{DEFAULT_SQLITE_PATH}"
@@ -19,6 +26,28 @@ else:
 
 engine = create_engine(DATABASE_URL, future=True, **engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+
+
+def _ensure_mysql_utf8mb4(connection) -> None:
+    """Upgrade the image catalog's textual columns for four-byte Unicode."""
+    if connection.dialect.name != "mysql":
+        return
+
+    requires_conversion = connection.scalar(text("""
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'images'
+              AND CHARACTER_SET_NAME IS NOT NULL
+              AND CHARACTER_SET_NAME <> 'utf8mb4'
+        )
+    """))
+    if requires_conversion:
+        connection.execute(text(
+            "ALTER TABLE images CONVERT TO CHARACTER SET utf8mb4 "
+            "COLLATE utf8mb4_unicode_ci"
+        ))
 
 
 @contextmanager
@@ -80,6 +109,11 @@ def init_db(seed_file: str | None = None) -> None:
                     "ON images(image_uid)"
                 )
             )
+
+        # create_all() cannot change the charset of an existing MySQL table.
+        # Convert after adding columns so titles, subtitles, and original file
+        # names can all contain emoji on both old and new installations.
+        _ensure_mysql_utf8mb4(connection)
 
     if not seed_file or not os.path.exists(seed_file):
         return

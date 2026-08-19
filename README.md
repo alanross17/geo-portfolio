@@ -41,6 +41,13 @@ python app.py
 
 If no `DATABASE_URL` is provided, the app falls back to a local SQLite file (`backend/images.db`). On first run, the database is auto-populated from `backend/images.json` when present.
 
+For MySQL, the application configures connections as `utf8mb4` and upgrades
+the existing `images` table to `utf8mb4_unicode_ci` during startup. This is
+required for four-byte Unicode characters such as emoji in image titles,
+subtitles, and original filenames. Back up the database before first deploying
+this migration to a large production catalog because MySQL may rebuild and lock
+the table while changing its character set.
+
 ### Frontend
 ```bash
 cd frontend
