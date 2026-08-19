@@ -7,6 +7,10 @@ Base = declarative_base()
 
 class Image(Base):
     __tablename__ = "images"
+    __table_args__ = {
+        "mysql_charset": "utf8mb4",
+        "mysql_collate": "utf8mb4_unicode_ci",
+    }
 
     id = Column(String(128), primary_key=True)
     relative_url = Column(String(255), nullable=False)
