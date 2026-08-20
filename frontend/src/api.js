@@ -25,6 +25,11 @@ export async function addLeaderboardEntry(sessionId, name) {
   return data
 }
 
+export async function fetchImageHeatmap() {
+  const { data } = await axios.get("/api/images/heatmap")
+  return data
+}
+
 export async function fetchAdminAuthStatus() {
   const { data } = await axios.get("/api/admin/auth/status")
   return data

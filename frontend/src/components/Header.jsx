@@ -7,6 +7,7 @@ export default function Header({
   bonusTotal,
   onReset,
   onOpenLeaderboard,
+  onOpenHeatmap,
   menuOpen,
   onToggleMenu,
   tone = "dark",
@@ -95,6 +96,12 @@ export default function Header({
                     onClick={onOpenLeaderboard}
                   >
                     Open leaderboard
+                  </button>
+                  <button
+                    className="w-full px-4 py-3 text-left text-sm font-medium text-gray-800 transition hover:bg-gray-50"
+                    onClick={onOpenHeatmap}
+                  >
+                    Open Image Heatmap
                   </button>
                 </div>
               </div>
