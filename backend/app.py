@@ -4,7 +4,8 @@ import uuid
 import logging
 import os
 from datetime import datetime, timedelta
-from math import radians, sin, cos, asin, sqrt, exp
+from math import radians, sin, cos, asin, sqrt, exp, floor
+from collections import Counter
 from typing import List
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory, session
 from flask_cors import CORS # type: ignore
@@ -157,6 +158,36 @@ def calc_score(dist_m) -> int:
         return 0
 
     return round(SCORE_MAX * exp(-dist_m / LAMBDA))
+
+def create_density_bins(images: list[Image], resolution=0.1):
+    bins = Counter()
+
+    for image in images:
+        if image.lat is None or image.lng is None:
+            continue
+
+        lat = float(image.lat)
+        lng = float(image.lng)
+
+        lat_index = floor(lat / resolution)
+        lng_index = floor(lng / resolution)
+
+        bins[(lat_index, lng_index)] += 1
+
+    locations = []
+
+    for (lat_index, lng_index), count in bins.items():
+        # Position the heat point in the middle of the grid cell.
+        latitude = (lat_index + 0.5) * resolution
+        longitude = (lng_index + 0.5) * resolution
+
+        locations.append({
+            "latitude": round(latitude, 6),
+            "longitude": round(longitude, 6),
+            "count": count,
+        })
+
+    return locations
 
 
 def classify_orientation(aspect_ratio: float) -> str:
@@ -673,6 +704,24 @@ def api_add_leaderboard():
             for item in entries
         ]
     return jsonify(payload)
+
+@app.get("/api/images/heatmap")
+def api_image_heatmap():
+    with get_session() as session:
+        images = session.scalars(
+            select(Image).where(
+                Image.lat.is_not(None),
+                Image.lng.is_not(None),
+            )
+        ).all()
+
+        resolution = 0.1
+        locations = create_density_bins(images, resolution)
+
+        return jsonify({
+            "resolution": resolution,
+            "locations": locations,
+        })
 
 @app.get("/health")
 def healthcheck():

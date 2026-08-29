@@ -6,7 +6,8 @@ import ResultOverlay from "./components/ResultOverlay.jsx"
 import Footer from "./components/Footer.jsx"
 import ScoreSummary from "./components/ScoreSummary.jsx"
 import LeaderboardModal from "./components/LeaderboardModal.jsx"
-import { addLeaderboardEntry, fetchLeaderboard, startSession, submitSessionGuess } from "./api.js"
+import ImageHeatMapModal from "./components/ImageHeatMapModal.jsx"
+import { addLeaderboardEntry, fetchLeaderboard, startSession, submitSessionGuess, fetchImageHeatmap } from "./api.js"
 
 const BONUS_POINTS = 500
 
@@ -18,8 +19,10 @@ export default function App() {
   const [rounds, setRounds] = useState([])
   const [summaryOpen, setSummaryOpen] = useState(false)
   const [leaderboardOpen, setLeaderboardOpen] = useState(false)
+  const [heatmapOpen, setHeatmapOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [leaderboard, setLeaderboard] = useState([])
+  const [heatmap, setHeatmap] = useState([])
   const [hasSubmittedScore, setHasSubmittedScore] = useState(false)
 
   const [overlayTone, setOverlayTone] = useState({ topLeft: "dark", bottomLeft: "dark" })
@@ -60,6 +63,11 @@ export default function App() {
   const refreshLeaderboard = async () => {
     const data = await fetchLeaderboard()
     setLeaderboard(data)
+  }
+
+  const refreshHeatmap = async () => {
+    const data = await fetchImageHeatmap()
+    setHeatmap(data)
   }
 
   useEffect(() => {
@@ -112,7 +120,14 @@ export default function App() {
     setMenuOpen(false)
   }
 
+  const openHeatmap = () => {
+    refreshHeatmap()
+    setHeatmapOpen(true)
+    setMenuOpen(false)
+  }
+
   const closeLeaderboard = () => setLeaderboardOpen(false)
+  const closeHeatmap = () => setHeatmapOpen(false)
 
   const totalScore = session?.totalScore || 0
   const bonusTotal = session?.bonusTotal || 0
@@ -142,6 +157,7 @@ export default function App() {
         }
         onReset={resetGame}
         onOpenLeaderboard={openLeaderboard}
+        onOpenHeatmap={openHeatmap}
         currentScore={totalScore}
         roundsPlayed={session?.roundsPlayed || 0}
         roundsLimit={session?.roundLimit || 0}
@@ -175,6 +191,12 @@ export default function App() {
         placement={placement}
         leaderboard={leaderboard}
         currentScore={totalScore}
+      />
+      <ImageHeatMapModal
+        open={heatmapOpen}
+        onClose={closeHeatmap}
+        placement={placement}
+        heatmap={heatmap}
       />
       <Footer tone={overlayTone.bottomLeft} />
     </div>
