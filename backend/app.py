@@ -1,46 +1,44 @@
 import json
-import random
 import uuid
-import logging
 import os
-from datetime import datetime, timedelta
-from math import radians, sin, cos, asin, sqrt, exp, floor
-from collections import Counter
-from typing import List
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory, session
 from flask_cors import CORS # type: ignore
-from sqlalchemy import delete, exists, or_, select
+from sqlalchemy import select
 from werkzeug.exceptions import RequestEntityTooLarge
 
+from config import (
+    BASE_DIR,
+    IMAGES_PATH,
+    FRONTEND_BUILD,
+    FRONTEND_ASSETS,
+    MAX_UPLOAD_SIZE,
+    ROUND_LIMIT,
+)
+
 from database import Image, get_session, init_db
-from models import GameSession, LeaderboardEntry, GuessLog
+from models import GameSession, LeaderboardEntry
 from admin import (
     ValidationError, admin_configured, metadata_from_payload, parse_coordinates,
     require_admin, verify_password,
 )
-from image_processing import (FORMAT_EXTENSIONS, PROCESSING_VERSION,
-    VARIANT_MANIFEST, ImageProcessingError, process_image, remove_image_files,
-    valid_image_id, variant_path)
-from image_resources import build_image_resource
+from image_processing import (
+    FORMAT_EXTENSIONS, 
+    PROCESSING_VERSION,
+    VARIANT_MANIFEST, 
+    ImageProcessingError, 
+    process_image, 
+    remove_image_files,
+    valid_image_id, 
+    variant_path
+)
+from image_resources import build_image_resource, choose_image_order
 from image_migration import register_image_migration
 from name_validation import validate_leaderboard_name, InvalidLeaderboardName
-
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
-
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGES_PATH = os.environ.get("IMAGE_STORAGE_ROOT", os.path.join(BASE_DIR, "media", "images"))
-FRONTEND_BUILD = os.path.join(BASE_DIR, "static", "app")
-FRONTEND_ASSETS = os.path.join(FRONTEND_BUILD, "assets")
-
-UNUSED_SESSION_MAX_AGE_MINUTES = int(os.environ.get("UNUSED_SESSION_MAX_AGE_MINUTES", "60"))
-DB_PURGE_RUN_CHANCE = 0.05 # ~5% chance
-
-MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MiB
+from utils_api import get_client_ip, get_client_geo_from_cf, serialize_session, current_image_for_session, parse_guess_payload, record_guess, serialize_image
+from utils_db import maybe_purge_unused_sessions, find_image
+from utils_game import haversine, calc_score, compute_bonus
+from utils_heatmap import create_density_bins
+from utils import logger, build_public_url
 
 
 # Frontend files have explicit routes below. A Flask static catch-all mounted at
@@ -72,256 +70,7 @@ else:
 # Initialize database and seed from the legacy JSON file if it's present.
 init_db(os.path.join(BASE_DIR, "images.json"))
 
-BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 register_image_migration(app, IMAGES_PATH)
-
-ROUND_LIMIT = 5
-BONUS_RADIUS_METERS = 25_000
-BONUS_POINTS = 500
-
-
-def build_public_url(relative_url: str) -> str:
-    rel = relative_url.lstrip("/")
-    if BASE_URL:
-        return f"{BASE_URL}/{rel}"
-    return f"/{rel}"
-
-def get_client_ip() -> str | None:
-    # 1. Prefer Cloudflare header (if you’ve enabled it)
-    cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip:
-        return cf_ip
-
-    # 2. Fall back to X-Forwarded-For (left-most is original client)
-    xff = request.headers.get("X-Forwarded-For")
-    if xff:
-        return xff.split(",")[0].strip()
-
-    # 3. Last resort
-    return request.remote_addr
-
-def get_client_geo_from_cf() -> dict:
-    # Values may be None if CF doesn’t provide them on your plan
-    return {
-        "country": request.headers.get("CF-IPCountry"),
-        "region": request.headers.get("CF-Region"),
-        "city": request.headers.get("CF-IPCity"),
-        "lat": request.headers.get("CF-IPLat"),
-        "lon": request.headers.get("CF-IPLon"),
-    }
-
-def serialize_image(image: Image) -> dict:
-    return build_image_resource(image, build_public_url)
-
-def find_image(db_session, image_id):
-    return db_session.scalar(select(Image).where(or_(Image.id == image_id, Image.image_uid == image_id)))
-
-def parse_guess_payload(data):
-    if not isinstance(data, dict):
-        return None, "Invalid JSON payload"
-
-    guess = data.get("guess")
-    if not isinstance(guess, dict):
-        return None, "Missing guess payload"
-
-    try:
-        guess_lat = float(guess.get("lat"))
-        guess_lng = float(guess.get("lng"))
-    except (TypeError, ValueError):
-        return None, "Invalid or missing guess coordinates"
-
-    return {"lat": guess_lat, "lng": guess_lng}, None
-
-def haversine(lat1, lon1, lat2, lon2):
-    # returns distance in meters
-    R = 6371000.0
-    dlat = radians(lat2 - lat1)
-    dlon = radians(lon2 - lon1)
-    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
-    return 2 * R * asin(sqrt(a))
-
-def calc_score(dist_m) -> int:
-    # score function
-    # exponential decay, emphasizes close guesses
-    D_MAX = 20_000_0000 # (m) max scorable distance, based on the rough maximum distance between places on a globe
-    SCORE_MAX = 5000 # the maximum allowable score (perfect guess)
-    LAMBDA = 4_000_000 # is a “scale” parameter (in m). Roughly: distance where score has dropped to ~37% of max.
-
-    # Example scores with λ = 4000:
-    # 0 km → 5000
-    # 1,000 km → ~3,894
-    # 2,000 km → ~3,033
-    # 5,000 km → ~1,433
-    # 10,000 km → ~410
-    # 20,000 km → ~34
-
-    if dist_m > D_MAX:
-        return 0
-
-    return round(SCORE_MAX * exp(-dist_m / LAMBDA))
-
-def create_density_bins(images: list[Image], resolution=0.1):
-    bins = Counter()
-
-    for image in images:
-        if image.lat is None or image.lng is None:
-            continue
-
-        lat = float(image.lat)
-        lng = float(image.lng)
-
-        lat_index = floor(lat / resolution)
-        lng_index = floor(lng / resolution)
-
-        bins[(lat_index, lng_index)] += 1
-
-    locations = []
-
-    for (lat_index, lng_index), count in bins.items():
-        # Position the heat point in the middle of the grid cell.
-        latitude = (lat_index + 0.5) * resolution
-        longitude = (lng_index + 0.5) * resolution
-
-        locations.append({
-            "latitude": round(latitude, 6),
-            "longitude": round(longitude, 6),
-            "count": count,
-        })
-
-    return locations
-
-
-def classify_orientation(aspect_ratio: float) -> str:
-    # classifies what is considered portrait or landscape
-    # exact aspect ratio is slightly over shot in both directions in case of rounding errors
-    # considers square images as both orientations
-    if aspect_ratio > 1.05:
-        return "landscape"
-
-    if aspect_ratio < 0.95:
-        return "portrait"
-
-    return "square"
-
-def choose_image_order(session, viewport_aspect_ratio: float) -> List[str]:
-    """Choose images matching the viewport orientation where possible."""
-    # there's some obvious flaws here, but this is just simple start to better adapt images to screens
-    # - with a certain aspect ratio there are still large variations that may lead to cropping (i.e. 5:4 vs 2:1)
-    # - image list is set on session creation, therefore if users window size changes, the matching breaks.
-
-    # get all images where aspect ratio has been calculated
-    images = session.scalars(
-        select(Image).where(Image.aspect_ratio.is_not(None))
-    ).all()
-
-    if not images:
-        raise ValueError("No images available")
-
-    # classify orientation of aspect ratio passed from user via API
-    viewport_orientation = (
-        "landscape"
-        if viewport_aspect_ratio > 1
-        else "portrait"
-    )
-
-    matching_images = []
-    fallback_images = []
-
-    # loop db image list
-    for image in images:
-        # detrmine orientation class
-        image_orientation = classify_orientation(
-            float(image.aspect_ratio)
-        )
-
-        # sort by whether they fit the users orientation
-        if image_orientation in (viewport_orientation, "square"):
-            matching_images.append(image.id)
-        else:
-            fallback_images.append(image.id)
-
-    # shuffle the lists
-    random.shuffle(matching_images)
-    random.shuffle(fallback_images)
-
-    desired_count = ROUND_LIMIT + 2
-
-    # this should be cleaned up to avoid even processing the fallback images if enough matches exist.
-    # Matching images are always used first. Other orientations only fill gaps.
-    image_ids = matching_images + fallback_images
-
-    if not image_ids:
-        raise ValueError("No usable images available")
-
-    return image_ids[:desired_count]
-
-
-def serialize_session(game_session: GameSession, images_lookup: dict) -> dict:
-    rounds = json.loads(game_session.rounds_json or "[]")
-    image_ids = [i for i in game_session.image_order.split(",") if i]
-    next_image = None
-    if not game_session.finished and len(rounds) < len(image_ids):
-        current_id = image_ids[len(rounds)]
-        img = images_lookup.get(current_id)
-        if img:
-            next_image = serialize_image(img)
-
-    return {
-        "session_id": game_session.id,
-        "round_limit": game_session.round_limit,
-        "rounds_played": len(rounds),
-        "total_score": game_session.total_score,
-        "bonus_total": game_session.bonus_total,
-        "finished": game_session.finished,
-        "next_image": next_image,
-    }
-
-def compute_bonus(distance_meters: float) -> int:
-    return BONUS_POINTS if distance_meters <= BONUS_RADIUS_METERS else 0
-
-def current_image_for_session(game_session: GameSession, images_lookup: dict):
-    rounds = json.loads(game_session.rounds_json or "[]")
-    order_ids = [i for i in game_session.image_order.split(",") if i]
-    if len(rounds) >= len(order_ids):
-        return None
-    img_id = order_ids[len(rounds)]
-    return images_lookup.get(img_id)
-
-def record_guess(
-    session,
-    *,
-    session_id: str | None,
-    image_id: str,
-    guess_lat: float,
-    guess_lng: float,
-    distance_meters: float,
-):
-    log_entry = GuessLog(
-        session_id=session_id,
-        image_id=image_id,
-        guess_lat=guess_lat,
-        guess_lng=guess_lng,
-        distance_meters=round(distance_meters, 2),
-    )
-    session.add(log_entry)
-
-def maybe_purge_unused_sessions(session):
-    if random.random() < DB_PURGE_RUN_CHANCE:
-        purge_unused_sessions(session)
-
-def purge_unused_sessions(session) -> int:
-    """Delete stale sessions that never recorded a guess."""
-
-    cutoff = datetime.utcnow() - timedelta(minutes=UNUSED_SESSION_MAX_AGE_MINUTES)
-    stmt = delete(GameSession).where(
-        GameSession.created_at < cutoff,
-        ~exists().where(GuessLog.session_id == GameSession.id),
-    )
-    result = session.execute(stmt)
-    deleted_rows = result.rowcount or 0
-    if deleted_rows:
-        logger.info("Purged %s unused sessions", deleted_rows)
-    return deleted_rows
 
 
 # Error handler code

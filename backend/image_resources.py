@@ -1,7 +1,13 @@
 """Shared public/admin image resource serialization."""
 import json
+import random
+from typing import List
 
+from sqlalchemy import select
+
+from database import Image
 from image_processing import VARIANT_MANIFEST, valid_generation, valid_image_id
+from config import ROUND_LIMIT
 
 
 def _variants_from(value):
@@ -110,3 +116,69 @@ def build_image_resource(image, build_public_url, *, admin=False):
             "processingVersion": getattr(image, "processing_version", None),
             "variantGeneration": generation,})
     return resource
+
+
+def classify_orientation(aspect_ratio: float) -> str:
+    # classifies what is considered portrait or landscape
+    # exact aspect ratio is slightly over shot in both directions in case of rounding errors
+    # considers square images as both orientations
+    if aspect_ratio > 1.05:
+        return "landscape"
+
+    if aspect_ratio < 0.95:
+        return "portrait"
+
+    return "square"
+
+
+def choose_image_order(session, viewport_aspect_ratio: float) -> List[str]:
+    """Choose images matching the viewport orientation where possible."""
+    # there's some obvious flaws here, but this is just simple start to better adapt images to screens
+    # - with a certain aspect ratio there are still large variations that may lead to cropping (i.e. 5:4 vs 2:1)
+    # - image list is set on session creation, therefore if users window size changes, the matching breaks.
+
+    # get all images where aspect ratio has been calculated
+    images = session.scalars(
+        select(Image).where(Image.aspect_ratio.is_not(None))
+    ).all()
+
+    if not images:
+        raise ValueError("No images available")
+
+    # classify orientation of aspect ratio passed from user via API
+    viewport_orientation = (
+        "landscape"
+        if viewport_aspect_ratio > 1
+        else "portrait"
+    )
+
+    matching_images = []
+    fallback_images = []
+
+    # loop db image list
+    for image in images:
+        # detrmine orientation class
+        image_orientation = classify_orientation(
+            float(image.aspect_ratio)
+        )
+
+        # sort by whether they fit the users orientation
+        if image_orientation in (viewport_orientation, "square"):
+            matching_images.append(image.id)
+        else:
+            fallback_images.append(image.id)
+
+    # shuffle the lists
+    random.shuffle(matching_images)
+    random.shuffle(fallback_images)
+
+    desired_count = ROUND_LIMIT + 2
+
+    # this should be cleaned up to avoid even processing the fallback images if enough matches exist.
+    # Matching images are always used first. Other orientations only fill gaps.
+    image_ids = matching_images + fallback_images
+
+    if not image_ids:
+        raise ValueError("No usable images available")
+
+    return image_ids[:desired_count]
