@@ -23,6 +23,7 @@ from image_processing import (FORMAT_EXTENSIONS, PROCESSING_VERSION,
     valid_image_id, variant_path)
 from image_resources import build_image_resource
 from image_migration import register_image_migration
+from name_validation import validate_leaderboard_name, InvalidLeaderboardName
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -683,6 +684,12 @@ def api_add_leaderboard():
 
     if not name or not session_id:
         return jsonify({"error": "name and session_id required"}), 400
+
+    # This is a crude filter to just straight up say no to any vaguely inappropriate words.
+    try:
+        player_name = validate_leaderboard_name(data.get("name"))
+    except InvalidLeaderboardName as error:
+        return {"error": str(error)}, 400
 
     with get_session() as session:
         game_session = session.get(GameSession, session_id)
