@@ -19,18 +19,40 @@ services:
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
       - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
       - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-true}
+      - ADMIN_AUTH_MODE=${ADMIN_AUTH_MODE}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.geo-portfolio.entrypoints=http"
-      - "traefik.http.routers.geo-portfolio.rule=Host(`explore.alanross.io`)"
-      - "traefik.http.middlewares.geo-portfolio-https-redirect.redirectscheme.scheme=https"
-      - "traefik.http.routers.geo-portfolio.middlewares=geo-portfolio-https-redirect"
-      - "traefik.http.routers.geo-portfolio-secure.entrypoints=https"
-      - "traefik.http.routers.geo-portfolio-secure.rule=Host(`explore.alanross.io`)"
-      - "traefik.http.routers.geo-portfolio-secure.tls=true"
-      - "traefik.http.routers.geo-portfolio-secure.service=geo-portfolio"
-      - "traefik.http.services.geo-portfolio.loadbalancer.server.port=8080"
       - "traefik.docker.network=proxy"
+
+      # Define GeoPortfolio's upstream.
+      - "traefik.http.services.geoportfolio.loadbalancer.server.port=8080"
+
+      # Existing public router: no authentication.
+      - "traefik.http.routers.geo-public.rule=Host(`explore.alanross.io`)"
+      - "traefik.http.routers.geo-public.entrypoints=https"
+      - "traefik.http.routers.geo-public.tls=true"
+      - "traefik.http.routers.geo-public.service=geoportfolio"
+      - "traefik.http.routers.geo-public.priority=10"
+
+      # Authentik forward-auth middleware.
+      - "traefik.http.middlewares.geo-auth.forwardauth.address=http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"
+      - "traefik.http.middlewares.geo-auth.forwardauth.trustForwardHeader=true"
+
+      # Protected admin router.
+      - "traefik.http.routers.geo-admin.rule=Host(`explore.alanross.io`) && (Path(`/admin`) || PathPrefix(`/admin/`) || Path(`/api/admin`) || PathPrefix(`/api/admin/`))"
+      - "traefik.http.routers.geo-admin.entrypoints=https"
+      - "traefik.http.routers.geo-admin.tls=true"
+      - "traefik.http.routers.geo-admin.priority=100"
+      - "traefik.http.routers.geo-admin.middlewares=geo-auth@docker"
+      - "traefik.http.routers.geo-admin.service=geoportfolio"
+
+      # Authentik callback and outpost endpoints.
+      # Must bypass the forward-auth middleware.
+      - "traefik.http.routers.geo-outpost.rule=Host(`explore.alanross.io`) && PathPrefix(`/outpost.goauthentik.io/`)"
+      - "traefik.http.routers.geo-outpost.entrypoints=https"
+      - "traefik.http.routers.geo-outpost.tls=true"
+      - "traefik.http.routers.geo-outpost.priority=200"
+      - "traefik.http.routers.geo-outpost.service=authentik@docker"
 
 networks:
   proxy:

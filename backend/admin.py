@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import wraps
+import os
 from urllib.parse import urlparse
 
 from flask import current_app, jsonify, request, session
@@ -19,13 +20,36 @@ def admin_configured() -> bool:
     return bool(current_app.config.get("ADMIN_PASSWORD_HASH") and current_app.secret_key)
 
 
+def admin_authenticated() -> bool:
+    """Determine whether the current request is authenticated as admin."""
+    auth_mode = os.environ.get("ADMIN_AUTH_MODE", "password")
+
+    if auth_mode == "proxy":
+        # Authentication is enforced by the trusted reverse proxy.
+        return True
+
+    if auth_mode == "password":
+        return bool(admin_configured() and session.get("is_admin"))
+
+    # Fail closed for unknown authentication modes.
+    return False
+
+
 def require_admin(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if not admin_configured():
-            return jsonify({"error": "Admin authentication is not configured"}), 503
-        if not session.get("is_admin"):
-            return jsonify({"error": "Admin authentication required"}), 401
+        auth_mode = os.environ.get("ADMIN_AUTH_MODE", "password")
+
+        if auth_mode == "password" and not admin_configured():
+            return jsonify({
+                "error": "Admin authentication is not configured"
+            }), 503
+
+        if not admin_authenticated():
+            return jsonify({
+                "error": "Admin authentication required"
+            }), 401
+
         return view(*args, **kwargs)
 
     return wrapped

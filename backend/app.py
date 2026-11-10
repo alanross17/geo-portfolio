@@ -1,7 +1,7 @@
 import json
 import uuid
 import os
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory, session
+from flask import Flask, abort, current_app, jsonify, request, send_file, send_from_directory, session
 from flask_cors import CORS # type: ignore
 from sqlalchemy import select
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -18,7 +18,7 @@ from config import (
 from database import Image, get_session, init_db
 from models import GameSession, LeaderboardEntry
 from admin import (
-    ValidationError, admin_configured, metadata_from_payload, parse_coordinates,
+    ValidationError, admin_authenticated, admin_configured, metadata_from_payload, parse_coordinates,
     require_admin, verify_password,
 )
 from image_processing import (
@@ -84,7 +84,10 @@ def handle_request_too_large(exc):
 # All API Stuff
 @app.get("/api/admin/auth/status")
 def admin_auth_status():
-    return jsonify({"authenticated": bool(admin_configured() and session.get("is_admin"))})
+    return jsonify({
+        "authenticated": admin_authenticated(),
+        "mode": os.environ.get("ADMIN_AUTH_MODE", "password"),
+    })
 
 
 @app.post("/api/admin/auth/login")
