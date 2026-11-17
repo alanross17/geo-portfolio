@@ -19,6 +19,8 @@ RUN npm run build
 # -------------------------------
 FROM python:3.12-slim AS backend
 
+LABEL org.opencontainers.image.source="https://github.com/alanross17/geo-portfolio"
+
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
